@@ -13,5 +13,16 @@ export const colors = {
 
   border: '#E5E5E5',
 
+  success: '#16A34A',
+  successBg: '#F0FDF4',
+  onlineDot: '#22C55E',
+
+  missed: '#F87171',
+  missedBg: '#FEE2E2',
+
+  primaryLight: 'rgba(138, 110, 71, 0.10)',
+  primaryLight30: 'rgba(138, 110, 71, 0.30)',
+  primaryLight05: 'rgba(138, 110, 71, 0.05)',
+
   transparent: 'transparent',
 } as const;

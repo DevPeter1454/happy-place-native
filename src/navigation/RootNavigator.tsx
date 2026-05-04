@@ -1,9 +1,11 @@
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { SplashScreen } from '../screens/SplashScreen';
-import { OnboardingScreen } from '../screens/OnboardingScreen';
-import { MainSanctuary } from '../screens/MainSanctuary';
-import { AuthNavigator } from './AuthNavigator';
-import type { RootStackParamList } from './types';
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { SplashScreen } from "../screens/SplashScreen";
+import { OnboardingScreen } from "../screens/OnboardingScreen";
+import { MainTabNavigator } from "./MainTabNavigator";
+import { PrayerTrackerScreen } from "../screens/PrayerTrackerScreen";
+import { NewJournalEntryScreen } from "../screens/NewJournalEntryScreen";
+import { AuthNavigator } from "./AuthNavigator";
+import type { RootStackParamList } from "./types";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -12,14 +14,16 @@ export function RootNavigator() {
     <Stack.Navigator
       screenOptions={{
         headerShown: false,
-        animation: 'fade',
-        contentStyle: { backgroundColor: '#F8F6F2' },
+        animation: "fade",
+        contentStyle: { backgroundColor: "#F8F6F2" },
       }}
     >
       <Stack.Screen name="Splash" component={SplashScreen} />
       <Stack.Screen name="Onboarding" component={OnboardingScreen} />
       <Stack.Screen name="Auth" component={AuthNavigator} />
-      <Stack.Screen name="Main" component={MainSanctuary} />
+      <Stack.Screen name="Main" component={MainTabNavigator} />
+      <Stack.Screen name="PrayerTracker" component={PrayerTrackerScreen} options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="NewJournalEntry" component={NewJournalEntryScreen} options={{ presentation: 'modal' }} />
     </Stack.Navigator>
   );
 }
