@@ -9,6 +9,7 @@ export type RootStackParamList = {
   Main: NavigatorScreenParams<MainTabParamList>;
   PrayerTracker: undefined;
   NewJournalEntry: undefined;
+  RetreatDashboard: undefined;
 };
 
 export type AuthStackParamList = {

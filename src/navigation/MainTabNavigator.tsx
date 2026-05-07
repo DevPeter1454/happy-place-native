@@ -11,23 +11,12 @@ import {
 import { colors, fontFamilies, fontSizes, spacing } from '../theme';
 import { HomeDashboard } from '../screens/HomeDashboard';
 import { JournalListScreen } from '../screens/JournalListScreen';
+import { BibleReaderScreen } from '../screens/BibleReaderScreen';
+import { ProfileScreen } from '../screens/ProfileScreen';
+import { RetreatScreen } from '../screens/RetreatScreen';
 import type { MainTabParamList } from './types';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
-
-// Placeholder screens for non-Home tabs
-function PlaceholderScreen({ title }: { title: string }) {
-  return (
-    <View style={placeholderStyles.container}>
-      <Text style={placeholderStyles.text}>{title}</Text>
-      <Text style={placeholderStyles.subtitle}>Coming soon</Text>
-    </View>
-  );
-}
-
-const BibleScreen = () => <PlaceholderScreen title="Bible" />;
-const RetreatScreen = () => <PlaceholderScreen title="Retreat" />;
-const ProfileScreen = () => <PlaceholderScreen title="Profile" />;
 
 export function MainTabNavigator() {
   return (
@@ -50,7 +39,7 @@ export function MainTabNavigator() {
       />
       <Tab.Screen
         name="Bible"
-        component={BibleScreen}
+        component={BibleReaderScreen}
         options={{
           tabBarIcon: ({ color, size }) => <BookOpen size={size} color={color} />,
         }}

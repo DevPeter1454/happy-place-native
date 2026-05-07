@@ -7,6 +7,9 @@ import { NewJournalEntryScreen } from "../screens/NewJournalEntryScreen";
 import { AuthNavigator } from "./AuthNavigator";
 import type { RootStackParamList } from "./types";
 
+import { RetreatDashboardScreen } from "../screens/RetreatDashboardScreen";
+
+
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export function RootNavigator() {
@@ -24,6 +27,7 @@ export function RootNavigator() {
       <Stack.Screen name="Main" component={MainTabNavigator} />
       <Stack.Screen name="PrayerTracker" component={PrayerTrackerScreen} options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="NewJournalEntry" component={NewJournalEntryScreen} options={{ presentation: 'modal' }} />
+      <Stack.Screen name="RetreatDashboard" component={RetreatDashboardScreen} options={{ animation: 'slide_from_right' }} />
     </Stack.Navigator>
   );
 }
