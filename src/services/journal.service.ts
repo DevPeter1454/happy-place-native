@@ -44,6 +44,19 @@ export async function updateEntry(
   );
 }
 
+/** Toggle/set the favorite flag on a journal entry. */
+export async function setFavorite(
+  uid: string,
+  entryId: string,
+  isFavorite: boolean
+): Promise<void> {
+  await setDoc(
+    doc(db, 'users', uid, 'journalEntries', entryId),
+    { isFavorite },
+    { merge: true }
+  );
+}
+
 /** List a user's journal entries, newest first. */
 export async function listEntries(uid: string): Promise<JournalEntry[]> {
   const snap = await getDocs(query(journalCol(uid), orderBy('createdAt', 'desc')));

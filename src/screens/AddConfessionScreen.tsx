@@ -8,6 +8,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -25,16 +26,40 @@ import {
   radii,
   shadows,
 } from "../theme";
+import { useAuth } from "../context/AuthContext";
+import { addActivity } from "../services/activities.service";
 
 export function AddConfessionScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const { user } = useAuth();
   const [confession, setConfession] = useState("");
   const [reference, setReference] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const handleSave = () => {
-    // In a real app, logic to save would go here
-    navigation.goBack();
+  const handleSave = async () => {
+    const text = confession.trim();
+    if (!text || saving) return;
+    if (!user?.uid) {
+      Alert.alert("Not signed in", "Please sign in to save your confession.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // Logged as a `confession` activity; the reference (if any) is appended
+      // to the notes. This also bumps the user's streak/totals atomically and
+      // is what flips the Home dashboard's Confession task to "done".
+      const notes = reference.trim() ? `${text}\n\n${reference.trim()}` : text;
+      await addActivity(user.uid, { type: "confession", notes });
+      navigation.goBack();
+    } catch {
+      Alert.alert(
+        "Couldn't save",
+        "Something went wrong saving your confession. Please try again."
+      );
+      setSaving(false);
+    }
   };
 
   return (
@@ -107,13 +132,15 @@ export function AddConfessionScreen() {
           style={({ pressed }) => [
             styles.saveButton,
             pressed && styles.saveButtonPressed,
-            !confession && styles.saveButtonDisabled,
+            (!confession.trim() || saving) && styles.saveButtonDisabled,
           ]}
           onPress={handleSave}
-          disabled={!confession}
+          disabled={!confession.trim() || saving}
         >
           <CheckCircle2 size={20} color={colors.white} />
-          <Text style={styles.saveButtonText}>Save Confession</Text>
+          <Text style={styles.saveButtonText}>
+            {saving ? "Saving..." : "Save Confession"}
+          </Text>
         </Pressable>
       </View>
     </KeyboardAvoidingView>

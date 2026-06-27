@@ -1,55 +1,101 @@
-import React, { useState } from "react";
-import { View, Text, ScrollView, Pressable, StyleSheet } from "react-native";
+import React, { useCallback, useState } from "react";
+import {
+  View,
+  Text,
+  ScrollView,
+  Pressable,
+  StyleSheet,
+  ActivityIndicator,
+  TextInput,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { MotiView } from "moti";
-import { Menu, Search, Plus } from "lucide-react-native";
+import { Menu, Search, Plus, X } from "lucide-react-native";
 import { colors, fontFamilies, fontSizes, spacing, radii, shadows } from "../theme";
 import { JournalCard } from "../components/journal/JournalCard";
 import type { MainTabScreenProps } from "../navigation/types";
-
-const MOCK_ENTRIES = [
-  {
-    id: "1",
-    date: "June 4",
-    previewText: "Today I felt a profound sense of peace while walking through the park. The way the light filtered through the oak trees...",
-    time: "10:45 AM",
-    imageUrl: "https://lh3.googleusercontent.com/aida-public/AB6AXuAqPfhunxdv1c-Pzuh3WZSJw8BPwhvSzZJIgLqrLXsnSkfgPuxc7Hy8Y6zNzgdCx9KAc9W9FyLmHLEWP4CVgn-jwQSDiCBl2FMNmPYr3In_PLObAsnRJX44GZlkFE8yslNy1tmxGJJexfXgb9bLQ4jkc2PgOQ4g9ScSZH49STkGGD_uUZOTldP5kfmGhNSGH7aV8m8lRJPH_ZglytYQOLImCR1xRpN6TXIXbCNq2OapwlN7xactTzF7-G5dx3c7tTiOhaGAiffFH-Ub",
-    isFavorite: false,
-  },
-  {
-    id: "2",
-    date: "June 2",
-    previewText: "Reflecting on the small wins of the week, like finishing that book I started months ago. It feels good to prioritize my...",
-    time: "8:15 PM",
-    imageUrl: "https://lh3.googleusercontent.com/aida-public/AB6AXuC0NUjit9msxot8o2d7ESaWoVGH8dnTbH9zkiJ_yafu3oBRNrFfcwJM0rfh1WP4iEeoPitl6kF8-J2IpIdCo809RavtWd3dOQ1T-uhMR-qjQu0x_buBOziorX_bp4I2I7zrJ7uUdBXBNvHDB-Yt8X_PELzXiqlptXhUC79uDT4daXayBsv9_-ApBG9dnmU0OJZcdUr0ESHKx4ucNp6VRtX6CcjjE2rDcsGlNMIc2XMC0Sj8d17DYB9kA_YjVhsDBqZE1bwzDfKJS3p_",
-    isFavorite: true,
-  },
-  {
-    id: "3",
-    date: "May 31",
-    previewText: "Quiet moments in the morning are becoming my favorite part of the day. The city is still sleeping and the world...",
-    time: "6:30 AM",
-    isFavorite: false,
-  },
-];
+import { useAuth } from "../context/AuthContext";
+import { listEntries, setFavorite } from "../services/journal.service";
+import type { JournalEntry } from "../types/models";
+import { imageForEntry } from "../constants/moods";
 
 const TABS = ["All Entries", "Favorites", "Monthly"];
 
-export function JournalListScreen({ navigation: tabNavigation }: MainTabScreenProps<"Journal">) {
+/** Firestore Timestamp → JS Date, tolerating an unresolved server timestamp. */
+function entryDate(entry: JournalEntry): Date {
+  return entry.createdAt ? entry.createdAt.toDate() : new Date();
+}
+
+export function JournalListScreen(_props: MainTabScreenProps<"Journal">) {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("All Entries");
-  const [entries, setEntries] = useState(MOCK_ENTRIES);
+  const [entries, setEntries] = useState<JournalEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState("");
 
-  const toggleFavorite = (id: string) => {
-    setEntries((prev) =>
-      prev.map((entry) => (entry.id === id ? { ...entry, isFavorite: !entry.isFavorite } : entry))
-    );
+  const openEntry = (entry: JournalEntry) => {
+    navigation.navigate("JournalEntryDetail", {
+      entryId: entry.id,
+      title: entry.title,
+      body: entry.body,
+      mood: entry.mood,
+      createdAt: entryDate(entry).getTime(),
+      isFavorite: entry.isFavorite,
+    });
   };
 
+  // Reload whenever the screen regains focus, so a newly-saved reflection
+  // appears without needing a manual refresh.
+  useFocusEffect(
+    useCallback(() => {
+      if (!user?.uid) {
+        setEntries([]);
+        setLoading(false);
+        return;
+      }
+      let active = true;
+      setLoading(true);
+      listEntries(user.uid)
+        .then((result) => active && setEntries(result))
+        .catch(() => active && setEntries([]))
+        .finally(() => active && setLoading(false));
+      return () => {
+        active = false;
+      };
+    }, [user?.uid])
+  );
+
+  const toggleFavorite = (entry: JournalEntry) => {
+    if (!user?.uid) return;
+    const next = !entry.isFavorite;
+    // Optimistic update; revert if the write fails.
+    setEntries((prev) =>
+      prev.map((e) => (e.id === entry.id ? { ...e, isFavorite: next } : e))
+    );
+    setFavorite(user.uid, entry.id, next).catch(() => {
+      setEntries((prev) =>
+        prev.map((e) => (e.id === entry.id ? { ...e, isFavorite: !next } : e))
+      );
+    });
+  };
+
+  const now = new Date();
+  const trimmedQuery = query.trim().toLowerCase();
   const filteredEntries = entries.filter((entry) => {
-    if (activeTab === "Favorites") return entry.isFavorite;
+    if (activeTab === "Favorites" && !entry.isFavorite) return false;
+    if (activeTab === "Monthly") {
+      const d = entryDate(entry);
+      if (d.getMonth() !== now.getMonth() || d.getFullYear() !== now.getFullYear())
+        return false;
+    }
+    if (trimmedQuery) {
+      const haystack = `${entry.title ?? ""} ${entry.body}`.toLowerCase();
+      if (!haystack.includes(trimmedQuery)) return false;
+    }
     return true;
   });
 
@@ -61,10 +107,37 @@ export function JournalListScreen({ navigation: tabNavigation }: MainTabScreenPr
             <Menu size={24} color={colors.primary} />
           </Pressable>
           <Text style={styles.headerTitle}>My Journal</Text>
-          <Pressable style={styles.iconButton}>
-            <Search size={24} color={colors.primary} />
+          <Pressable
+            style={styles.iconButton}
+            onPress={() => {
+              setSearchOpen((open) => {
+                if (open) setQuery("");
+                return !open;
+              });
+            }}
+          >
+            {searchOpen ? (
+              <X size={24} color={colors.primary} />
+            ) : (
+              <Search size={24} color={colors.primary} />
+            )}
           </Pressable>
         </View>
+
+        {searchOpen && (
+          <View style={styles.searchRow}>
+            <Search size={18} color={colors.primaryLight30} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search reflections..."
+              placeholderTextColor={colors.primaryLight30}
+              value={query}
+              onChangeText={setQuery}
+              autoFocus
+              returnKeyType="search"
+            />
+          </View>
+        )}
 
         <View style={styles.tabsContainer}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -87,21 +160,42 @@ export function JournalListScreen({ navigation: tabNavigation }: MainTabScreenPr
           transition={{ type: "timing", duration: 400 }}
           style={styles.listContainer}
         >
-          {filteredEntries.map((entry) => (
-            <JournalCard
-              key={entry.id}
-              id={entry.id}
-              date={entry.date}
-              previewText={entry.previewText}
-              time={entry.time}
-              imageUrl={entry.imageUrl}
-              isFavorite={entry.isFavorite}
-              onToggleFavorite={() => toggleFavorite(entry.id)}
-            />
-          ))}
-          {filteredEntries.length === 0 && (
+          {filteredEntries.map((entry) => {
+            const d = entryDate(entry);
+            return (
+              <JournalCard
+                key={entry.id}
+                id={entry.id}
+                date={d.toLocaleDateString("en-US", {
+                  month: "long",
+                  day: "numeric",
+                })}
+                previewText={entry.body}
+                time={d.toLocaleTimeString("en-US", {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
+                imageUrl={imageForEntry(entry.id, entry.mood)}
+                isFavorite={entry.isFavorite}
+                onPress={() => openEntry(entry)}
+                onToggleFavorite={() => toggleFavorite(entry)}
+              />
+            );
+          })}
+          {loading && filteredEntries.length === 0 && (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No entries found.</Text>
+              <ActivityIndicator color={colors.primary} />
+            </View>
+          )}
+          {!loading && filteredEntries.length === 0 && (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>
+                {activeTab === "Favorites"
+                  ? "No favorites yet. Tap the heart on an entry to save it."
+                  : activeTab === "Monthly"
+                    ? "No entries this month yet."
+                    : "No reflections yet. Tap + to write your first one."}
+              </Text>
             </View>
           )}
         </MotiView>
@@ -140,6 +234,25 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     padding: spacing.sm,
+  },
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginHorizontal: spacing.xl,
+    marginBottom: spacing.xl,
+    paddingHorizontal: spacing.lg,
+    height: 44,
+    borderRadius: radii.full,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.primaryLight05,
+  },
+  searchInput: {
+    flex: 1,
+    fontFamily: fontFamilies.sans,
+    fontSize: fontSizes.base,
+    color: colors.textPrimary,
   },
   tabsContainer: {
     paddingHorizontal: spacing.xl,

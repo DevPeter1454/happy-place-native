@@ -3,6 +3,7 @@ import {
   doc,
   addDoc,
   deleteDoc,
+  getDoc,
   getDocs,
   query,
   where,
@@ -117,18 +118,32 @@ export async function addActivity(
   return activityRef.id;
 }
 
+/** Read a user's aggregate stats summary, or null if none has been written. */
+export async function getStats(uid: string): Promise<UserStats | null> {
+  const snap = await getDoc(statsRef(uid));
+  return snap.exists() ? (snap.data() as UserStats) : null;
+}
+
 /** List a user's activities (newest first), optionally filtered by type. */
 export async function listActivities(
   uid: string,
   type?: ActivityType
 ): Promise<SpiritualActivity[]> {
   const base = activitiesCol(uid);
+  // A typed query uses only an equality filter (no orderBy) so it doesn't
+  // require a composite index; we sort by date client-side instead.
   const q = type
-    ? query(base, where('type', '==', type), orderBy('date', 'desc'))
+    ? query(base, where('type', '==', type))
     : query(base, orderBy('date', 'desc'));
 
   const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as SpiritualActivity);
+  const items = snap.docs.map(
+    (d) => ({ id: d.id, ...d.data() }) as SpiritualActivity
+  );
+
+  return type
+    ? items.sort((a, b) => b.date.toMillis() - a.date.toMillis())
+    : items;
 }
 
 export async function deleteActivity(

@@ -57,6 +57,7 @@ export function TextInput({
           style={[
             styles.input,
             isIconVariant ? styles.inputIcon : styles.inputDefault,
+            rightAction ? { paddingRight: 48 } : null,
           ]}
         />
         {rightAction && <View style={styles.rightAction}>{rightAction}</View>}

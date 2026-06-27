@@ -12,7 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MotiView } from 'moti';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft, ArrowRight, User, Mail, Lock } from 'lucide-react-native';
+import { ArrowLeft, ArrowRight, User, Mail, Lock, Eye, EyeOff } from 'lucide-react-native';
 import { Button } from '../components/ui/Button';
 import { TextInput } from '../components/ui/TextInput';
 import { IconButton } from '../components/ui/IconButton';
@@ -33,6 +33,7 @@ export function SignupScreen({ navigation }: AuthStackScreenProps<'Signup'>) {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
@@ -148,10 +149,22 @@ export function SignupScreen({ navigation }: AuthStackScreenProps<'Signup'>) {
                   value={password}
                   onChangeText={setPassword}
                   placeholder="Create a strong password"
-                  secureTextEntry
+                  secureTextEntry={!showPassword}
                   variant="icon"
                   leftIcon={
                     <Lock size={20} color={`${colors.primary}99`} />
+                  }
+                  rightAction={
+                    <Pressable
+                      onPress={() => setShowPassword(!showPassword)}
+                      hitSlop={8}
+                    >
+                      {showPassword ? (
+                        <EyeOff size={20} color={colors.textPlaceholder} />
+                      ) : (
+                        <Eye size={20} color={colors.textPlaceholder} />
+                      )}
+                    </Pressable>
                   }
                 />
 

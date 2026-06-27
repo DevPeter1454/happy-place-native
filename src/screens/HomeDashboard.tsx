@@ -1,65 +1,86 @@
-import React from "react";
+import React, { useCallback, useState } from "react";
 import { View, Text, ScrollView, Pressable, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { MotiView } from "moti";
 import { Image } from "expo-image";
 import {
-  Bell,
   Heart,
   BookOpen,
   PenLine,
-  ChevronRight,
   Calendar,
   BookOpenText,
 } from "lucide-react-native";
-import {
-  colors,
-  fontFamilies,
-  fontSizes,
-  spacing,
-  radii,
-  shadows,
-} from "../theme";
+import { colors, fontFamilies, fontSizes, spacing } from "../theme";
 import { ProgressCard } from "../components/dashboard/ProgressCard";
 import { TaskCard } from "../components/dashboard/TaskCard";
 import { StatCard } from "../components/dashboard/StatCard";
 import type { RootStackParamList } from "../navigation/types";
+import { useAuth } from "../context/AuthContext";
+import { getStats, listActivities } from "../services/activities.service";
+import { listEntries } from "../services/journal.service";
+import type { ActivityType } from "../types/models";
 
-const AVATAR_URL =
+/** Avatar used when the profile has no `photoURL` set. */
+const FALLBACK_AVATAR_URL =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuA37M7Idq13PCJDUNLNDCGEiAfVLUCGLlYLiXaAYfDWjUNnKkWp-VoRHPzgFyM7SnyJpudymw5AjDT1SpTyF1nSkSvR8kwUhFffCd5rRm-M1mcHzxJ9w75HHlHGqsnz7kunJDfCprKVaM_1gtPN_LZQa3TySzZednpBLWKAG2fWln15kAr4uVQ0Nemmj-7qhtXwWB4ugdVozw_fc_Fi3bOp5NRpquYqdkulApO4rGvFGVpdUUpUpnPqULHr3c6MkP_uP5lUO5Szk35f";
 
-const TASKS = [
+/** Identifiers for the four daily disciplines shown on the dashboard. */
+type TaskId = "prayer" | "bible" | "confession" | "journal";
+
+/**
+ * Static definitions for the daily disciplines. Their `status` is derived at
+ * runtime from today's logged activities/journal entries — only the labels and
+ * the screen each one links to are fixed here.
+ */
+const TASKS: {
+  id: TaskId;
+  title: string;
+  subtitle: string;
+  /** The activity type that marks this task done, or "journal" for entries. */
+  source: ActivityType | "journal";
+}[] = [
   {
     id: "prayer",
     title: "Prayer",
     subtitle: '"Be still and know..."',
-    status: "done" as const,
-    iconColor: colors.primary,
+    source: "prayer",
   },
   {
     id: "bible",
     title: "Bible Reading",
     subtitle: "Next: Psalms 23",
-    status: "active" as const,
-    iconColor: colors.white,
+    source: "bible_reading",
   },
   {
     id: "confession",
     title: "Confession",
     subtitle: "Heart alignment",
-    status: "done" as const,
-    iconColor: colors.primary,
+    source: "confession",
   },
   {
     id: "journal",
     title: "Journal",
     subtitle: "Morning reflection",
-    status: "done" as const,
-    iconColor: colors.primary,
+    source: "journal",
   },
 ];
+
+function getTimeBasedGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good Morning";
+  if (hour < 17) return "Good Afternoon";
+  return "Good Evening";
+}
+
+/** Local YYYY-MM-DD key for a date — mirrors the helper in activities.service. */
+function dateKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
 function getTaskIcon(id: string, iconColor: string) {
   const size = 24;
@@ -77,10 +98,103 @@ function getTaskIcon(id: string, iconColor: string) {
   }
 }
 
+/** Which TaskCard ids are completed today, plus the monthly totals + streak. */
+interface DashboardData {
+  doneToday: Record<TaskId, boolean>;
+  prayerTotal: number;
+  bibleTotal: number;
+  streakDays: number;
+}
+
+const EMPTY_DATA: DashboardData = {
+  doneToday: { prayer: false, bible: false, confession: false, journal: false },
+  prayerTotal: 0,
+  bibleTotal: 0,
+  streakDays: 0,
+};
+
 export function HomeDashboard() {
   const insets = useSafeAreaInsets();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { profile, user } = useAuth();
+  const fullName = profile?.fullName ?? user?.displayName ?? "";
+  const firstName = fullName.trim().split(" ")[0] || "Friend";
+  const avatarUrl = profile?.photoURL ?? FALLBACK_AVATAR_URL;
+
+  const [data, setData] = useState<DashboardData>(EMPTY_DATA);
+
+  const loadData = useCallback(async (uid: string) => {
+    const todayKey = dateKey(new Date());
+    const [activities, entries, stats] = await Promise.all([
+      listActivities(uid),
+      listEntries(uid),
+      getStats(uid),
+    ]);
+
+    const doneToday: Record<TaskId, boolean> = {
+      prayer: false,
+      bible: false,
+      confession: false,
+      journal: false,
+    };
+    for (const a of activities) {
+      if (dateKey(a.date.toDate()) !== todayKey) continue;
+      if (a.type === "prayer") doneToday.prayer = true;
+      else if (a.type === "bible_reading") doneToday.bible = true;
+      else if (a.type === "confession") doneToday.confession = true;
+    }
+    doneToday.journal = entries.some(
+      (e) => e.createdAt && dateKey(e.createdAt.toDate()) === todayKey
+    );
+
+    setData({
+      doneToday,
+      prayerTotal: stats?.totalsByType.prayer ?? 0,
+      bibleTotal: stats?.totalsByType.bible_reading ?? 0,
+      streakDays: stats?.currentStreak ?? 0,
+    });
+  }, []);
+
+  // Reload whenever the screen regains focus, so newly-logged disciplines
+  // are reflected when the user navigates back to the dashboard.
+  useFocusEffect(
+    useCallback(() => {
+      if (!user?.uid) {
+        setData(EMPTY_DATA);
+        return;
+      }
+      let active = true;
+      loadData(user.uid).catch(() => {
+        if (active) setData(EMPTY_DATA);
+      });
+      return () => {
+        active = false;
+      };
+    }, [user?.uid, loadData])
+  );
+
+  const completed = TASKS.filter((t) => data.doneToday[t.id]).length;
+  const total = TASKS.length;
+  const percentage = Math.round((completed / total) * 100);
+
+  /** Route a discipline's "Start" button to the screen that logs it. */
+  const startTask = (id: TaskId) => {
+    switch (id) {
+      case "prayer":
+        navigation.navigate("PrayerTracker");
+        break;
+      case "bible":
+        navigation.navigate("Main", { screen: "Bible" });
+        break;
+      case "confession":
+        navigation.navigate("AddConfession");
+        break;
+      case "journal":
+        navigation.navigate("NewJournalEntry");
+        break;
+    }
+  };
 
   return (
     <MotiView
@@ -96,51 +210,55 @@ export function HomeDashboard() {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <View style={styles.avatarContainer}>
+            <Pressable
+              onPress={() => navigation.navigate("Main", { screen: "Profile" })}
+              style={styles.avatarContainer}
+            >
               <Image
-                source={{ uri: AVATAR_URL }}
+                source={{ uri: avatarUrl }}
                 style={styles.avatar}
                 contentFit="cover"
               />
               <View style={styles.onlineDot} />
-            </View>
+            </Pressable>
             <View>
               <Text style={styles.greeting}>Peace be with you</Text>
-              <Text style={styles.userName}>Good Morning, David</Text>
+              <Text style={styles.userName}>
+                {getTimeBasedGreeting()}, {firstName}
+              </Text>
             </View>
           </View>
-          <Pressable
-            style={({ pressed }) => [
-              styles.notifButton,
-              pressed && styles.notifButtonPressed,
-            ]}
-          >
-            <Bell size={20} color={colors.primary} />
-          </Pressable>
         </View>
 
         {/* Progress Card */}
-        <ProgressCard percentage={75} completed={3} total={4} streakDays={12} />
+        <ProgressCard
+          percentage={percentage}
+          completed={completed}
+          total={total}
+          streakDays={data.streakDays}
+        />
 
         {/* Daily Tasks */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Daily Tasks</Text>
-            <Pressable>
-              <Text style={styles.editButton}>Edit Tasks</Text>
-            </Pressable>
           </View>
           <View style={styles.taskList}>
-            {TASKS.map((task) => (
-              <TaskCard
-                key={task.id}
-                icon={getTaskIcon(task.id, task.iconColor)}
-                title={task.title}
-                subtitle={task.subtitle}
-                status={task.status}
-                onStart={() => {}}
-              />
-            ))}
+            {TASKS.map((task) => {
+              const isDone = data.doneToday[task.id];
+              const status = isDone ? "done" : "active";
+              const iconColor = isDone ? colors.primary : colors.white;
+              return (
+                <TaskCard
+                  key={task.id}
+                  icon={getTaskIcon(task.id, iconColor)}
+                  title={task.title}
+                  subtitle={task.subtitle}
+                  status={status}
+                  onStart={() => startTask(task.id)}
+                />
+              );
+            })}
           </View>
         </View>
 
@@ -150,25 +268,17 @@ export function HomeDashboard() {
           <View style={styles.statsGrid}>
             <StatCard
               icon={<Calendar size={22} color={colors.primary} />}
-              value={12}
+              value={data.prayerTotal}
               label="Prayer Days"
               onPress={() => navigation.navigate("PrayerTracker")}
             />
             <StatCard
               icon={<BookOpenText size={22} color={colors.primary} />}
-              value={10}
+              value={data.bibleTotal}
               label="Bible Readings"
+              onPress={() => navigation.navigate("Main", { screen: "Bible" })}
             />
           </View>
-          <Pressable
-            style={({ pressed }) => [
-              styles.insightsButton,
-              pressed && styles.insightsButtonPressed,
-            ]}
-          >
-            <Text style={styles.insightsButtonText}>View Full Insights</Text>
-            <ChevronRight size={16} color={colors.primary} />
-          </Pressable>
         </View>
       </ScrollView>
     </MotiView>
@@ -232,20 +342,6 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     lineHeight: 30,
   },
-  notifButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.white,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: colors.primaryLight,
-    ...shadows.sm,
-  },
-  notifButtonPressed: {
-    backgroundColor: colors.primaryLight,
-  },
 
   // Sections
   section: {
@@ -262,12 +358,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: colors.textPrimary,
   },
-  editButton: {
-    fontFamily: fontFamilies.sans,
-    fontSize: fontSizes.sm,
-    fontWeight: "600",
-    color: colors.primary,
-  },
   taskList: {
     gap: spacing.lg,
   },
@@ -276,28 +366,5 @@ const styles = StyleSheet.create({
   statsGrid: {
     flexDirection: "row",
     gap: spacing.lg,
-  },
-
-  // Insights button
-  insightsButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.sm,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.primaryLight,
-    borderRadius: radii.lg,
-    paddingVertical: spacing.lg,
-    ...shadows.sm,
-  },
-  insightsButtonPressed: {
-    backgroundColor: colors.primaryLight05,
-  },
-  insightsButtonText: {
-    fontFamily: fontFamilies.sans,
-    fontSize: fontSizes.base,
-    fontWeight: "700",
-    color: colors.primary,
   },
 });

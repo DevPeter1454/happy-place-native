@@ -1,36 +1,126 @@
-import React from "react";
-import { View, Text, ScrollView, Pressable, StyleSheet } from "react-native";
+import React, { useCallback, useState } from "react";
+import {
+  View,
+  Text,
+  ScrollView,
+  Pressable,
+  StyleSheet,
+  ActivityIndicator,
+  Alert,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { Image } from "expo-image";
 import { MotiView } from "moti";
-import { ChevronLeft, CheckCircle2, MoreHorizontal, Plus } from "lucide-react-native";
+import { ChevronLeft, CheckCircle2, Trash2, Plus } from "lucide-react-native";
 import { colors, fontFamilies, fontSizes, spacing, radii, shadows } from "../theme";
+import { useAuth } from "../context/AuthContext";
+import {
+  listActivities,
+  deleteActivity,
+} from "../services/activities.service";
+import type { SpiritualActivity } from "../types/models";
+import { imageForEntry } from "../constants/moods";
 
-const CONFESSIONS = [
-  {
-    id: "1",
-    text: "I walk in wisdom today.",
-    verse: "Proverbs 2:6",
-    image: "https://lh3.googleusercontent.com/aida-public/AB6AXuCifV6Xj7UE9SAfZSBB5X-VNoCFxf5HISq63sUDMBzydS0egbsT1TFmf5RbYM9mVIRqUpQOcP1B_Qcz9YK6YN-dnAK1e1NxHbUZpqWHGKZHJOgiBY9-jcN-sU2IVEoYVXuFPCUYFi8ZVFSKWnXG6rmUzlo-atfznesHm022pGrSI6npZi7VzzP-7hPNJtcLe7biN9ElGGKKx1BU_p5_bsdW-tFnewsnKc0EjV-7qnG0fl3jLVlOlKYNYuVD1oT1pXnTbitQ64wt4Tnh",
-  },
-  {
-    id: "2",
-    text: "I live in God’s peace.",
-    verse: "Philippians 4:7",
-    image: "https://lh3.googleusercontent.com/aida-public/AB6AXuCZipjbRBdljadk5Ie4a8Zs0DgrwgF69EtA2gaVOIR8pPns-iiP44futeI9UgU6hCZ85wrxABJmyRtkDSr1jWpFUX0YQL6pPr863P2OLSKeZnjmrsfK0zGYCuXx4CJ5Yww-YVOkoh-uYp5XFbxImAF--sFZ5dRA7VjAqIZbIr7kJH64vb2VLzEUZSZeifFr6OV-HMb1bHg2_1wEAchk7ptGNeJiWAQf9TaWMwJLgdYzlw1NHLztRCkwAn5_uUoiDUYYqccskThbXQru",
-  },
-  {
-    id: "3",
-    text: "I am strengthened with all might.",
-    verse: "Colossians 1:11",
-    image: "https://lh3.googleusercontent.com/aida-public/AB6AXuAVRM7iVE4pKFcsnyldf4z-pAv_wT7U_XFt4CrcXh53eL-zefF_zFJgUZvHiLEmLfm-Xc-hecN6pRBeC2vCZG5nE5UacyjNzTfCaguDIS4rtSaCab-nY306Er-laoZIxtQxpBi-jOF0oYsl6mK_gLkL5-uAWXpzGz6REt-s2gMEvYvGjwO8ZICbcsUX5TbqjgOPuITznBKyVwfFwR4d3ffJ_lgoS_WvdNlBMIu771Le0Gz-sJewYLy4keMs6MCI7r5rMJxzkKg-QilF",
-  },
-];
+interface ConfessionView {
+  id: string;
+  text: string;
+  verse?: string;
+  image: string;
+  date: Date;
+}
+
+function isSameDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+/**
+ * Confessions are stored as `confession` activities whose `notes` hold the
+ * affirmation text and (optionally) a scripture reference, separated by a
+ * blank line — the format written by AddConfessionScreen.
+ */
+function toConfession(activity: SpiritualActivity): ConfessionView {
+  const notes = activity.notes ?? "";
+  const [text, ...rest] = notes.split("\n\n");
+  const verse = rest.join("\n\n").trim();
+  return {
+    id: activity.id,
+    text: text.trim() || "(No text)",
+    verse: verse || undefined,
+    image: imageForEntry(activity.id),
+    date: activity.date ? activity.date.toDate() : new Date(),
+  };
+}
 
 export function ConfessionListScreen() {
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
+  const { user } = useAuth();
+  const [confessions, setConfessions] = useState<ConfessionView[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [completed, setCompleted] = useState<Set<string>>(new Set());
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!user?.uid) {
+        setConfessions([]);
+        setLoading(false);
+        return;
+      }
+      let active = true;
+      setLoading(true);
+      listActivities(user.uid, "confession")
+        .then((result) => active && setConfessions(result.map(toConfession)))
+        .catch(() => active && setConfessions([]))
+        .finally(() => active && setLoading(false));
+      return () => {
+        active = false;
+      };
+    }, [user?.uid])
+  );
+
+  const toggleCompleted = (id: string) => {
+    setCompleted((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const confirmDelete = (item: ConfessionView) => {
+    Alert.alert("Delete confession", `"${item.text}"`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          if (!user?.uid) return;
+          // Optimistic removal; reload to restore on failure.
+          setConfessions((prev) => prev.filter((c) => c.id !== item.id));
+          deleteActivity(user.uid, item.id).catch(() => {
+            if (user.uid) {
+              listActivities(user.uid, "confession").then((r) =>
+                setConfessions(r.map(toConfession))
+              );
+            }
+          });
+        },
+      },
+    ]);
+  };
+
+  // The confession that fulfilled today's dashboard task is the earliest one
+  // created today; it shows as completed automatically (and can't be un-marked),
+  // mirroring the daily progress. Confessions are sorted newest-first, so the
+  // last of today's entries is the earliest.
+  const now = new Date();
+  const todays = confessions.filter((c) => isSameDay(c.date, now));
+  const taskConfessionId = todays.length ? todays[todays.length - 1].id : undefined;
 
   return (
     <View style={styles.container}>
@@ -54,32 +144,78 @@ export function ConfessionListScreen() {
           <Text style={styles.sectionSubtitle}>Speak these truths over your life today</Text>
         </View>
 
-        {CONFESSIONS.map((item, index) => (
-          <MotiView
-            key={item.id}
-            from={{ opacity: 0, translateY: 20 }}
-            animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: "timing", duration: 500, delay: index * 100 }}
-            style={styles.card}
-          >
-            <View style={styles.cardMain}>
-              <View style={styles.cardTextContainer}>
-                <Text style={styles.cardText}>{item.text}</Text>
-                <Text style={styles.cardVerse}>{item.verse}</Text>
+        {confessions.map((item, index) => {
+          // Auto-completed when it's today's task confession; otherwise manual.
+          const isAuto = item.id === taskConfessionId;
+          const isDone = isAuto || completed.has(item.id);
+          return (
+            <MotiView
+              key={item.id}
+              from={{ opacity: 0, translateY: 20 }}
+              animate={{ opacity: 1, translateY: 0 }}
+              transition={{ type: "timing", duration: 500, delay: index * 100 }}
+              style={styles.card}
+            >
+              <View style={styles.cardMain}>
+                <View style={styles.cardTextContainer}>
+                  <Text style={styles.cardText}>{item.text}</Text>
+                  {!!item.verse && (
+                    <Text style={styles.cardVerse}>{item.verse}</Text>
+                  )}
+                </View>
+                <Image source={{ uri: item.image }} style={styles.cardImage} />
               </View>
-              <Image source={{ uri: item.image }} style={styles.cardImage} />
-            </View>
-            <View style={styles.cardActions}>
-              <Pressable style={styles.completeButton}>
-                <CheckCircle2 size={18} color={colors.primary} />
-                <Text style={styles.completeButtonText}>Mark Completed</Text>
-              </Pressable>
-              <Pressable style={styles.moreButton}>
-                <MoreHorizontal size={20} color={colors.textMuted} />
-              </Pressable>
-            </View>
-          </MotiView>
-        ))}
+              <View style={styles.cardActions}>
+                <Pressable
+                  style={[
+                    styles.completeButton,
+                    isDone && styles.completeButtonActive,
+                  ]}
+                  onPress={() => toggleCompleted(item.id)}
+                  disabled={isAuto}
+                >
+                  <CheckCircle2
+                    size={18}
+                    color={isDone ? colors.white : colors.primary}
+                  />
+                  <Text
+                    style={[
+                      styles.completeButtonText,
+                      isDone && styles.completeButtonTextActive,
+                    ]}
+                  >
+                    {isAuto
+                      ? "Completed today"
+                      : isDone
+                        ? "Completed"
+                        : "Mark Completed"}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={styles.moreButton}
+                  onPress={() => confirmDelete(item)}
+                  hitSlop={8}
+                >
+                  <Trash2 size={20} color={colors.textMuted} />
+                </Pressable>
+              </View>
+            </MotiView>
+          );
+        })}
+
+        {loading && (
+          <View style={styles.stateBox}>
+            <ActivityIndicator color={colors.primary} />
+          </View>
+        )}
+        {!loading && confessions.length === 0 && (
+          <View style={styles.stateBox}>
+            <Text style={styles.emptyText}>
+              No confessions yet. Tap + to add an affirmation to speak over your
+              life.
+            </Text>
+          </View>
+        )}
       </ScrollView>
 
       <Pressable 
@@ -197,14 +333,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     borderRadius: radii.lg,
   },
+  completeButtonActive: {
+    backgroundColor: colors.primary,
+  },
   completeButtonText: {
     fontFamily: fontFamilies.sans,
     fontSize: fontSizes.sm,
     fontWeight: "600",
     color: colors.primary,
   },
+  completeButtonTextActive: {
+    color: colors.white,
+  },
   moreButton: {
     padding: spacing.xs,
+  },
+  stateBox: {
+    paddingVertical: spacing["3xl"],
+    alignItems: "center",
+  },
+  emptyText: {
+    fontFamily: fontFamilies.sans,
+    fontSize: fontSizes.base,
+    color: colors.textMuted,
+    textAlign: "center",
+    lineHeight: 22,
   },
   fab: {
     position: "absolute",

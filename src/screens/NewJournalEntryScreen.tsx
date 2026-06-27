@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -7,18 +7,11 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { MotiView } from "moti";
-import {
-  X,
-  MoreHorizontal,
-  Calendar,
-  Sun,
-  Image as ImageIcon,
-  Mic,
-  List,
-} from "lucide-react-native";
+import { MotiView, AnimatePresence } from "moti";
+import { X, Calendar, Sun } from "lucide-react-native";
 import {
   colors,
   fontFamilies,
@@ -28,11 +21,61 @@ import {
   shadows,
 } from "../theme";
 import type { RootStackScreenProps } from "../navigation/types";
+import { useAuth } from "../context/AuthContext";
+import { addEntry } from "../services/journal.service";
+import { MOODS } from "../constants/moods";
+
+/** Formats a date as e.g. "Today, Jun 27" (or "Mon, Jun 27" for past dates). */
+function formatEntryDate(d: Date): string {
+  const today = new Date();
+  const isToday =
+    d.getFullYear() === today.getFullYear() &&
+    d.getMonth() === today.getMonth() &&
+    d.getDate() === today.getDate();
+  const month = d.toLocaleDateString("en-US", { month: "short" });
+  const weekday = d.toLocaleDateString("en-US", { weekday: "short" });
+  return `${isToday ? "Today" : weekday}, ${month} ${d.getDate()}`;
+}
 
 export function NewJournalEntryScreen({
   navigation,
 }: RootStackScreenProps<"NewJournalEntry">) {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [mood, setMood] = useState(MOODS[0].label);
+  const [showMoodPicker, setShowMoodPicker] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const dateLabel = formatEntryDate(new Date());
+
+  const handleSave = async () => {
+    const trimmedBody = body.trim();
+    if (!trimmedBody || saving) return;
+    if (!user?.uid) {
+      Alert.alert("Not signed in", "Please sign in to save your reflection.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // Saving an entry is what flips the Home dashboard's Journal task to
+      // "done" for today (the dashboard checks today's journal entries).
+      await addEntry(user.uid, {
+        body: trimmedBody,
+        mood,
+        ...(title.trim() ? { title: title.trim() } : {}),
+      });
+      navigation.goBack();
+    } catch {
+      Alert.alert(
+        "Couldn't save",
+        "Something went wrong saving your reflection. Please try again."
+      );
+      setSaving(false);
+    }
+  };
 
   return (
     <KeyboardAvoidingView
@@ -57,14 +100,8 @@ export function NewJournalEntryScreen({
             <X size={28} color={colors.primary} />
           </Pressable>
           <Text style={styles.headerTitle}>New Reflection</Text>
-          <Pressable
-            style={({ pressed }) => [
-              styles.iconBtn,
-              pressed && styles.iconBtnPressed,
-            ]}
-          >
-            <MoreHorizontal size={28} color={colors.primary} />
-          </Pressable>
+          {/* Spacer keeps the title centered now the menu button is gone. */}
+          <View style={styles.iconBtn} />
         </View>
 
         <View style={styles.mainArea}>
@@ -72,14 +109,71 @@ export function NewJournalEntryScreen({
           <View style={styles.metadataContainer}>
             <View style={styles.metadataItem}>
               <Calendar size={20} color={colors.primaryLight30} />
-              <Text style={styles.metadataText}>Today, Oct 24</Text>
+              <Text style={styles.metadataText}>{dateLabel}</Text>
             </View>
             <View style={styles.metadataDivider} />
-            <View style={styles.metadataItem}>
+            <Pressable
+              style={styles.metadataItem}
+              onPress={() => setShowMoodPicker((v) => !v)}
+            >
               <Sun size={20} color={colors.primaryLight30} />
-              <Text style={styles.metadataText}>Feeling Grateful</Text>
-            </View>
+              <Text style={styles.metadataText}>Feeling {mood}</Text>
+            </Pressable>
           </View>
+
+          {/* Mood Picker */}
+          <AnimatePresence>
+            {showMoodPicker && (
+              <MotiView
+                from={{ opacity: 0, translateY: -8 }}
+                animate={{ opacity: 1, translateY: 0 }}
+                exit={{ opacity: 0, translateY: -8 }}
+                transition={{ type: "timing", duration: 200 }}
+                style={styles.moodPicker}
+              >
+                {MOODS.map((m) => {
+                  const selected = m.label === mood;
+                  return (
+                    <Pressable
+                      key={m.label}
+                      onPress={() => {
+                        setMood(m.label);
+                        setShowMoodPicker(false);
+                      }}
+                    >
+                      <MotiView
+                        animate={{
+                          scale: selected ? 1.06 : 1,
+                          backgroundColor: selected
+                            ? colors.primary
+                            : colors.white,
+                          borderColor: selected
+                            ? colors.primary
+                            : colors.primaryLight05,
+                        }}
+                        transition={{
+                          type: "spring",
+                          damping: 14,
+                          stiffness: 220,
+                        }}
+                        style={styles.moodChip}
+                      >
+                        <Text style={styles.moodEmoji}>{m.emoji}</Text>
+                        <Text
+                          style={[
+                            styles.moodChipText,
+                            selected && styles.moodChipTextSelected,
+                          ]}
+                        >
+                          {m.label}
+                        </Text>
+                      </MotiView>
+                    </Pressable>
+                  );
+                })}
+              </MotiView>
+            )}
+          </AnimatePresence>
 
           {/* Title Input */}
           <View style={styles.inputContainer}>
@@ -88,6 +182,8 @@ export function NewJournalEntryScreen({
               style={styles.titleInput}
               placeholder="Untitled Reflection"
               placeholderTextColor="rgba(138, 110, 71, 0.2)"
+              value={title}
+              onChangeText={setTitle}
             />
           </View>
 
@@ -100,6 +196,8 @@ export function NewJournalEntryScreen({
               placeholderTextColor="rgba(138, 110, 71, 0.2)"
               multiline
               textAlignVertical="top"
+              value={body}
+              onChangeText={setBody}
             />
           </View>
         </View>
@@ -111,24 +209,18 @@ export function NewJournalEntryScreen({
             { paddingBottom: Math.max(insets.bottom, spacing.lg) },
           ]}
         >
-          <View style={styles.footerActions}>
-            <Pressable style={styles.footerIconBtn}>
-              <ImageIcon size={24} color={colors.primaryLight30} />
-            </Pressable>
-            <Pressable style={styles.footerIconBtn}>
-              <Mic size={24} color={colors.primaryLight30} />
-            </Pressable>
-            <Pressable style={styles.footerIconBtn}>
-              <List size={24} color={colors.primaryLight30} />
-            </Pressable>
-          </View>
           <Pressable
             style={({ pressed }) => [
               styles.saveBtn,
               pressed && styles.saveBtnPressed,
+              (!body.trim() || saving) && styles.saveBtnDisabled,
             ]}
+            onPress={handleSave}
+            disabled={!body.trim() || saving}
           >
-            <Text style={styles.saveBtnText}>Save Entry</Text>
+            <Text style={styles.saveBtnText}>
+              {saving ? "Saving..." : "Save Entry"}
+            </Text>
           </Pressable>
         </View>
       </MotiView>
@@ -201,6 +293,35 @@ const styles = StyleSheet.create({
     height: 16,
     backgroundColor: "rgba(138, 110, 71, 0.2)",
   },
+  moodPicker: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    marginTop: -spacing.md,
+    marginBottom: spacing.xl,
+  },
+  moodChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.full,
+    borderWidth: 1,
+    // backgroundColor + borderColor are animated by Moti on selection.
+  },
+  moodEmoji: {
+    fontSize: fontSizes.sm,
+  },
+  moodChipText: {
+    fontFamily: fontFamilies.sans,
+    fontSize: fontSizes.sm,
+    fontWeight: "500",
+    color: colors.textPrimary,
+  },
+  moodChipTextSelected: {
+    color: colors.white,
+  },
   inputContainer: {
     marginBottom: spacing.xl,
   },
@@ -233,21 +354,11 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   footer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.lg,
     backgroundColor: "rgba(248, 246, 242, 0.8)",
     borderTopWidth: 1,
     borderTopColor: colors.primaryLight05,
-  },
-  footerActions: {
-    flexDirection: "row",
-    gap: spacing.md,
-  },
-  footerIconBtn: {
-    padding: spacing.sm,
   },
   saveBtn: {
     backgroundColor: colors.primary,
@@ -262,6 +373,10 @@ const styles = StyleSheet.create({
   saveBtnPressed: {
     opacity: 0.9,
     transform: [{ scale: 0.95 }],
+  },
+  saveBtnDisabled: {
+    backgroundColor: colors.primaryLight30,
+    shadowOpacity: 0,
   },
   saveBtnText: {
     fontFamily: fontFamilies.sans,

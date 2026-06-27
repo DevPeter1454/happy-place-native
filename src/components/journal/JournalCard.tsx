@@ -1,7 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { Image } from "expo-image";
-import { Heart } from "lucide-react-native";
 import {
   colors,
   fontFamilies,
@@ -10,6 +9,7 @@ import {
   radii,
   shadows,
 } from "../../theme";
+import { FavoriteHeart } from "./FavoriteHeart";
 
 export interface JournalCardProps {
   id: string;
@@ -46,17 +46,12 @@ export function JournalCard({
       <View style={styles.content}>
         <View style={styles.header}>
           <Text style={styles.date}>{date}</Text>
-          <Pressable
-            hitSlop={8}
-            onPress={onToggleFavorite}
+          <FavoriteHeart
+            active={!!isFavorite}
+            onToggle={() => onToggleFavorite?.()}
+            size={20}
             style={styles.favoriteButton}
-          >
-            <Heart
-              size={20}
-              color={isFavorite ? colors.primary : colors.primaryLight30}
-              fill={isFavorite ? colors.primary : "transparent"}
-            />
-          </Pressable>
+          />
         </View>
 
         <Text style={styles.previewText} numberOfLines={2}>
@@ -65,7 +60,7 @@ export function JournalCard({
 
         <View style={styles.footer}>
           <Text style={styles.time}>{time}</Text>
-          <Pressable style={styles.readMoreButton}>
+          <Pressable style={styles.readMoreButton} onPress={onPress}>
             <Text style={styles.readMoreText}>Read More</Text>
           </Pressable>
         </View>

@@ -61,6 +61,7 @@ export interface JournalEntry {
   title?: string;
   body: string;
   mood?: string;
+  isFavorite?: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

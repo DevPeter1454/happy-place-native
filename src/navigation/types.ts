@@ -9,6 +9,15 @@ export type RootStackParamList = {
   Main: NavigatorScreenParams<MainTabParamList>;
   PrayerTracker: undefined;
   NewJournalEntry: undefined;
+  JournalEntryDetail: {
+    entryId: string;
+    title?: string;
+    body: string;
+    mood?: string;
+    /** Entry creation time as epoch milliseconds (params must be serializable). */
+    createdAt: number;
+    isFavorite?: boolean;
+  };
   RetreatDashboard: undefined;
   ConfessionList: undefined;
   AddConfession: undefined;

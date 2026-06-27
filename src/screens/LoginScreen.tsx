@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MotiView } from 'moti';
-import { ArrowLeft, Eye, EyeOff, Flower2 } from 'lucide-react-native';
+import { ArrowLeft, Eye, EyeOff, Flower2, Mail, Lock } from 'lucide-react-native';
 import { Button } from '../components/ui/Button';
 import { TextInput } from '../components/ui/TextInput';
 import { IconButton } from '../components/ui/IconButton';
@@ -104,6 +104,10 @@ export function LoginScreen({ navigation }: AuthStackScreenProps<'Login'>) {
               placeholder="name@example.com"
               keyboardType="email-address"
               autoCapitalize="none"
+              variant="icon"
+              leftIcon={
+                <Mail size={20} color={`${colors.primary}99`} />
+              }
             />
 
             <TextInput
@@ -112,6 +116,10 @@ export function LoginScreen({ navigation }: AuthStackScreenProps<'Login'>) {
               onChangeText={setPassword}
               placeholder="Enter your password"
               secureTextEntry={!showPassword}
+              variant="icon"
+              leftIcon={
+                <Lock size={20} color={`${colors.primary}99`} />
+              }
               labelRight={
                 <Pressable onPress={handleForgotPassword}>
                   <Text style={styles.forgotText}>Forgot password?</Text>

@@ -5,6 +5,7 @@ import { OnboardingScreen } from "../screens/OnboardingScreen";
 import { MainTabNavigator } from "./MainTabNavigator";
 import { PrayerTrackerScreen } from "../screens/PrayerTrackerScreen";
 import { NewJournalEntryScreen } from "../screens/NewJournalEntryScreen";
+import { JournalEntryDetailScreen } from "../screens/JournalEntryDetailScreen";
 import { AuthNavigator } from "./AuthNavigator";
 import type { RootStackParamList } from "./types";
 
@@ -43,6 +44,7 @@ export function RootNavigator() {
           <Stack.Screen name="Main" component={MainTabNavigator} />
           <Stack.Screen name="PrayerTracker" component={PrayerTrackerScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="NewJournalEntry" component={NewJournalEntryScreen} options={{ presentation: 'modal' }} />
+          <Stack.Screen name="JournalEntryDetail" component={JournalEntryDetailScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="RetreatDashboard" component={RetreatDashboardScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="ConfessionList" component={ConfessionListScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="AddConfession" component={AddConfessionScreen} options={{ presentation: 'modal' }} />
