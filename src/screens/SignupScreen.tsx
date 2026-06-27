@@ -19,19 +19,47 @@ import { IconButton } from '../components/ui/IconButton';
 import { Divider } from '../components/ui/Divider';
 import { SocialAuthButtons } from '../components/ui/SocialAuthButtons';
 import { colors, fontFamilies, fontSizes, spacing, radii, shadows } from '../theme';
+import { useAuth } from '../context/AuthContext';
+import { mapAuthError } from '../services/auth.service';
 import type { AuthStackScreenProps } from '../navigation/types';
 
 const HEADER_IMAGE =
   'https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?q=80&w=2067&auto=format&fit=crop';
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export function SignupScreen({ navigation }: AuthStackScreenProps<'Signup'>) {
+  const { signUp } = useAuth();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
 
-  const handleSignup = () => {
-    navigation.getParent()?.reset({ index: 0, routes: [{ name: 'Main' }] });
+  const handleSignup = async () => {
+    if (!fullName.trim()) {
+      setError('Please enter your full name.');
+      return;
+    }
+    if (!EMAIL_RE.test(email.trim())) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
+    setError(null);
+    setLoading(true);
+    try {
+      await signUp(fullName, email, password);
+      // Success: AuthProvider updates state and RootNavigator shows the app.
+    } catch (e) {
+      setError(mapAuthError(e));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -127,10 +155,13 @@ export function SignupScreen({ navigation }: AuthStackScreenProps<'Signup'>) {
                   }
                 />
 
+                {error && <Text style={styles.errorText}>{error}</Text>}
+
                 <View style={styles.submitButton}>
                   <Button
                     title="Create Account"
                     onPress={handleSignup}
+                    loading={loading}
                     icon={<ArrowRight size={20} color={colors.white} />}
                   />
                 </View>
@@ -213,6 +244,12 @@ const styles = StyleSheet.create({
   },
   form: {
     gap: spacing.xl,
+  },
+  errorText: {
+    fontFamily: fontFamilies.sans,
+    fontSize: fontSizes.sm,
+    color: colors.error,
+    textAlign: 'center',
   },
   submitButton: {
     paddingTop: spacing.sm,

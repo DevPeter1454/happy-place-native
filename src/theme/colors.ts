@@ -13,6 +13,8 @@ export const colors = {
 
   border: '#E5E5E5',
 
+  error: '#B3261E',
+
   success: '#16A34A',
   successBg: '#F0FDF4',
   onlineDot: '#22C55E',

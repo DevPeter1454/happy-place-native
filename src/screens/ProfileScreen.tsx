@@ -5,11 +5,20 @@ import { Image } from "expo-image";
 import { MotiView } from "moti";
 import { ChevronRight, Bell, Shield, CircleHelp, LogOut, ChevronLeft, User, Pencil } from "lucide-react-native";
 import { colors, fontFamilies, fontSizes, spacing, radii, shadows } from "../theme";
+import { useAuth } from "../context/AuthContext";
+
+const FALLBACK_AVATAR =
+  "https://lh3.googleusercontent.com/aida-public/AB6AXuD8elyt9jBN6VgtRWx24O1TIUQvbtRerOk1fIvJoXkWBECpgNa8Ec-z3w97A6cLkQtCi6UK0hZU69G70fZnaNTA8wtX90OD9Rp80YlR6Muvl6VFIZa7f7F4rBqj1ZcOHGwOvgxj8pfVMT-3QSv6xESKa6eT5eT6xGI-eg0pGgECwV_0eCX4biKkMLyyGda_tY-zKMTFDwqu16bZYxyXoaM2pcov6ehiQBgQ0LY1ItUJvOLXBEQCKGVKNzWbrvmyq1DkEERlyP8MNveC";
 
 export function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const { user, profile, signOut } = useAuth();
   const [remindersEnabled, setRemindersEnabled] = React.useState(true);
   const [notificationsEnabled, setNotificationsEnabled] = React.useState(false);
+
+  const displayName = profile?.fullName ?? user?.displayName ?? "Friend";
+  const displayEmail = profile?.email ?? user?.email ?? "";
+  const avatarUri = profile?.photoURL ?? user?.photoURL ?? FALLBACK_AVATAR;
 
   return (
     <View style={styles.container}>
@@ -36,20 +45,17 @@ export function ProfileScreen() {
           <View style={styles.profileCard}>
             <View style={styles.avatarContainer}>
               <View style={styles.avatarBorder}>
-                <Image
-                  source={{
-                    uri: "https://lh3.googleusercontent.com/aida-public/AB6AXuD8elyt9jBN6VgtRWx24O1TIUQvbtRerOk1fIvJoXkWBECpgNa8Ec-z3w97A6cLkQtCi6UK0hZU69G70fZnaNTA8wtX90OD9Rp80YlR6Muvl6VFIZa7f7F4rBqj1ZcOHGwOvgxj8pfVMT-3QSv6xESKa6eT5eT6xGI-eg0pGgECwV_0eCX4biKkMLyyGda_tY-zKMTFDwqu16bZYxyXoaM2pcov6ehiQBgQ0LY1ItUJvOLXBEQCKGVKNzWbrvmyq1DkEERlyP8MNveC",
-                  }}
-                  style={styles.avatar}
-                />
+                <Image source={{ uri: avatarUri }} style={styles.avatar} />
               </View>
               <Pressable style={styles.editBadge}>
                 <Pencil size={12} color={colors.white} />
               </Pressable>
             </View>
             <View style={styles.userInfo}>
-              <Text style={styles.userName}>David</Text>
-              <Text style={styles.userEmail}>david@example.com</Text>
+              <Text style={styles.userName}>{displayName}</Text>
+              {displayEmail ? (
+                <Text style={styles.userEmail}>{displayEmail}</Text>
+              ) : null}
             </View>
           </View>
 
@@ -127,6 +133,7 @@ export function ProfileScreen() {
 
           <View style={styles.logoutSection}>
             <Pressable
+              onPress={() => signOut()}
               style={({ pressed }) => [
                 styles.logoutButton,
                 pressed && styles.logoutButtonPressed,

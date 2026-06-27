@@ -6,6 +6,7 @@ import {
   Pressable,
   KeyboardAvoidingView,
   Platform,
+  Alert,
   StyleSheet,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,16 +18,50 @@ import { IconButton } from '../components/ui/IconButton';
 import { Divider } from '../components/ui/Divider';
 import { GoogleLogo } from '../components/icons/GoogleLogo';
 import { colors, fontFamilies, fontSizes, spacing, radii } from '../theme';
+import { useAuth } from '../context/AuthContext';
+import { mapAuthError } from '../services/auth.service';
 import type { AuthStackScreenProps } from '../navigation/types';
 
 export function LoginScreen({ navigation }: AuthStackScreenProps<'Login'>) {
+  const { signIn, resetPassword } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
 
-  const handleLogin = () => {
-    navigation.getParent()?.reset({ index: 0, routes: [{ name: 'Main' }] });
+  const handleLogin = async () => {
+    if (!email.trim() || !password) {
+      setError('Please enter your email and password.');
+      return;
+    }
+    setError(null);
+    setLoading(true);
+    try {
+      await signIn(email, password);
+      // Success: AuthProvider updates state and RootNavigator shows the app.
+    } catch (e) {
+      setError(mapAuthError(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      setError('Enter your email above, then tap "Forgot password?".');
+      return;
+    }
+    try {
+      await resetPassword(email);
+      Alert.alert(
+        'Check your email',
+        `We sent a password reset link to ${email.trim()}.`
+      );
+    } catch (e) {
+      setError(mapAuthError(e));
+    }
   };
 
   return (
@@ -78,7 +113,7 @@ export function LoginScreen({ navigation }: AuthStackScreenProps<'Login'>) {
               placeholder="Enter your password"
               secureTextEntry={!showPassword}
               labelRight={
-                <Pressable onPress={() => {}}>
+                <Pressable onPress={handleForgotPassword}>
                   <Text style={styles.forgotText}>Forgot password?</Text>
                 </Pressable>
               }
@@ -96,8 +131,10 @@ export function LoginScreen({ navigation }: AuthStackScreenProps<'Login'>) {
               }
             />
 
+            {error && <Text style={styles.errorText}>{error}</Text>}
+
             <View style={styles.loginButtonWrapper}>
-              <Button title="Login" onPress={handleLogin} />
+              <Button title="Login" onPress={handleLogin} loading={loading} />
             </View>
           </View>
 
@@ -187,6 +224,12 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.xs,
     fontWeight: '500',
     color: colors.primary,
+  },
+  errorText: {
+    fontFamily: fontFamilies.sans,
+    fontSize: fontSizes.sm,
+    color: colors.error,
+    textAlign: 'center',
   },
   loginButtonWrapper: {
     paddingTop: spacing.lg,

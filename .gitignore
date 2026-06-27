@@ -30,8 +30,16 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
-.env*.local
+# env files / secrets (keep .env.example committed)
+.env
+.env.*
+!.env.example
+
+# Firebase (native config + CLI artifacts; not used by the JS SDK but ignored regardless)
+google-services.json
+GoogleService-Info.plist
+.firebase/
+firebase-debug.log*
 
 # typescript
 *.tsbuildinfo

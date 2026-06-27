@@ -1,5 +1,11 @@
 import React from 'react';
-import { Pressable, Text, StyleSheet, type ViewStyle } from 'react-native';
+import {
+  Pressable,
+  Text,
+  ActivityIndicator,
+  StyleSheet,
+  type ViewStyle,
+} from 'react-native';
 import { colors, fontFamilies, fontSizes, radii, shadows, spacing } from '../../theme';
 
 type ButtonVariant = 'primary' | 'outline' | 'social';
@@ -10,21 +16,43 @@ interface ButtonProps {
   variant?: ButtonVariant;
   icon?: React.ReactNode;
   style?: ViewStyle;
+  loading?: boolean;
+  disabled?: boolean;
 }
 
-export function Button({ title, onPress, variant = 'primary', icon, style }: ButtonProps) {
+export function Button({
+  title,
+  onPress,
+  variant = 'primary',
+  icon,
+  style,
+  loading = false,
+  disabled = false,
+}: ButtonProps) {
+  const isInactive = disabled || loading;
+  const spinnerColor =
+    variant === 'primary' ? colors.white : colors.primary;
+
   return (
     <Pressable
       onPress={onPress}
+      disabled={isInactive}
       style={({ pressed }) => [
         styles.base,
         variantStyles[variant],
-        pressed && pressedStyles[variant],
+        pressed && !isInactive && pressedStyles[variant],
+        isInactive && styles.inactive,
         style,
       ]}
     >
-      <Text style={[styles.baseText, variantTextStyles[variant]]}>{title}</Text>
-      {icon}
+      {loading ? (
+        <ActivityIndicator color={spinnerColor} />
+      ) : (
+        <>
+          <Text style={[styles.baseText, variantTextStyles[variant]]}>{title}</Text>
+          {icon}
+        </>
+      )}
     </Pressable>
   );
 }
@@ -43,6 +71,9 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.sans,
     fontSize: fontSizes.base,
     fontWeight: '600',
+  },
+  inactive: {
+    opacity: 0.6,
   },
 });
 
