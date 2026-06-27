@@ -10,6 +10,8 @@ export type RootStackParamList = {
   PrayerTracker: undefined;
   NewJournalEntry: undefined;
   RetreatDashboard: undefined;
+  ConfessionList: undefined;
+  AddConfession: undefined;
 };
 
 export type AuthStackParamList = {

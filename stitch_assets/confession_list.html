@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Happy Place - My Confessions</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#8a6e47",
+                        "background-light": "#f8f6f2",
+                        "background-dark": "#1c1a16",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.5rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .filled-icon {
+            font-variation-settings: 'FILL' 1;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen flex flex-col">
+<!-- Header -->
+<header class="sticky top-0 z-10 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-primary/10">
+<div class="flex items-center p-4 justify-between max-w-md mx-auto w-full">
+<button class="text-primary hover:bg-primary/10 p-2 rounded-full transition-colors">
+<span class="material-symbols-outlined">arrow_back</span>
+</button>
+<h1 class="text-lg font-bold tracking-tight flex-1 text-center pr-10">My Confessions</h1>
+</div>
+</header>
+<!-- Main Content -->
+<main class="flex-1 overflow-y-auto pb-32">
+<div class="max-w-md mx-auto px-4 pt-6">
+<div class="mb-6">
+<h2 class="text-xl font-bold text-slate-800 dark:text-slate-200">Daily Affirmations</h2>
+<p class="text-sm text-primary/70">Speak these truths over your life today</p>
+</div>
+<!-- List of Cards -->
+<div class="space-y-4">
+<!-- Card 1 -->
+<div class="flex flex-col gap-4 rounded-xl bg-white dark:bg-slate-900/50 p-5 shadow-sm border border-primary/5 hover:shadow-md transition-shadow">
+<div class="flex justify-between items-start gap-4">
+<div class="flex flex-col gap-1 flex-1">
+<p class="text-lg font-semibold leading-tight text-slate-900 dark:text-slate-100">I walk in wisdom today.</p>
+<p class="text-primary/60 text-sm font-medium">Proverbs 2:6</p>
+</div>
+<div class="size-16 rounded-lg bg-cover bg-center shrink-0" data-alt="Calm morning sunlight hitting a wooden table" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCifV6Xj7UE9SAfZSBB5X-VNoCFxf5HISq63sUDMBzydS0egbsT1TFmf5RbYM9mVIRqUpQOcP1B_Qcz9YK6YN-dnAK1e1NxHbUZpqWHGKZHJOgiBY9-jcN-sU2IVEoYVXuFPCUYFi8ZVFSKWnXG6rmUzlo-atfznesHm022pGrSI6npZi7VzzP-7hPNJtcLe7biN9ElGGKKx1BU_p5_bsdW-tFnewsnKc0EjV-7qnG0fl3jLVlOlKYNYuVD1oT1pXnTbitQ64wt4Tnh")'></div>
+</div>
+<div class="flex items-center justify-between pt-2">
+<button class="flex items-center gap-2 px-4 py-2 bg-background-light dark:bg-primary/10 text-primary rounded-xl text-sm font-semibold transition-colors hover:bg-primary/20">
+<span class="material-symbols-outlined text-lg">check_circle</span>
+<span>Mark Completed</span>
+</button>
+<button class="text-primary/40 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">more_horiz</span>
+</button>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="flex flex-col gap-4 rounded-xl bg-white dark:bg-slate-900/50 p-5 shadow-sm border border-primary/5 hover:shadow-md transition-shadow">
+<div class="flex justify-between items-start gap-4">
+<div class="flex flex-col gap-1 flex-1">
+<p class="text-lg font-semibold leading-tight text-slate-900 dark:text-slate-100">I live in God’s peace.</p>
+<p class="text-primary/60 text-sm font-medium">Philippians 4:7</p>
+</div>
+<div class="size-16 rounded-lg bg-cover bg-center shrink-0" data-alt="Quiet lake with calm water at sunset" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCZipjbRBdljadk5Ie4a8Zs0DgrwgF69EtA2gaVOIR8pPns-iiP44futeI9UgU6hCZ85wrxABJmyRtkDSr1jWpFUX0YQL6pPr863P2OLSKeZnjmrsfK0zGYCuXx4CJ5Yww-YVOkoh-uYp5XFbxImAF--sFZ5dRA7VjAqIZbIr7kJH64vb2VLzEUZSZeifFr6OV-HMb1bHg2_1wEAchk7ptGNeJiWAQf9TaWMwJLgdYzlw1NHLztRCkwAn5_uUoiDUYYqccskThbXQru")'></div>
+</div>
+<div class="flex items-center justify-between pt-2">
+<button class="flex items-center gap-2 px-4 py-2 bg-background-light dark:bg-primary/10 text-primary rounded-xl text-sm font-semibold transition-colors hover:bg-primary/20">
+<span class="material-symbols-outlined text-lg">check_circle</span>
+<span>Mark Completed</span>
+</button>
+<button class="text-primary/40 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">more_horiz</span>
+</button>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="flex flex-col gap-4 rounded-xl bg-white dark:bg-slate-900/50 p-5 shadow-sm border border-primary/5 hover:shadow-md transition-shadow">
+<div class="flex justify-between items-start gap-4">
+<div class="flex flex-col gap-1 flex-1">
+<p class="text-lg font-semibold leading-tight text-slate-900 dark:text-slate-100">I am strengthened with all might.</p>
+<p class="text-primary/60 text-sm font-medium">Colossians 1:11</p>
+</div>
+<div class="size-16 rounded-lg bg-cover bg-center shrink-0" data-alt="Strong mountain peak against a clear sky" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAVRM7iVE4pKFcsnyldf4z-pAv_wT7U_XFt4CrcXh53eL-zefF_zFJgUZvHiLEmLfm-Xc-hecN6pRBeC2vCZG5nE5UacyjNzTfCaguDIS4rtSaCab-nY306Er-laoZIxtQxpBi-jOF0oYsl6mK_gLkL5-uAWXpzGz6REt-s2gMEvYvGjwO8ZICbcsUX5TbqjgOPuITznBKyVwfFwR4d3ffJ_lgoS_WvdNlBMIu771Le0Gz-sJewYLy4keMs6MCI7r5rMJxzkKg-QilF")'></div>
+</div>
+<div class="flex items-center justify-between pt-2">
+<button class="flex items-center gap-2 px-4 py-2 bg-background-light dark:bg-primary/10 text-primary rounded-xl text-sm font-semibold transition-colors hover:bg-primary/20">
+<span class="material-symbols-outlined text-lg">check_circle</span>
+<span>Mark Completed</span>
+</button>
+<button class="text-primary/40 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">more_horiz</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- FAB -->
+<div class="fixed bottom-24 right-6 md:right-[calc(50%-200px)] z-20">
+<button class="bg-primary text-white size-14 rounded-full shadow-lg flex items-center justify-center hover:scale-105 transition-transform active:scale-95">
+<span class="material-symbols-outlined text-2xl">add</span>
+</button>
+</div>
+<!-- Bottom Navigation -->
+<nav class="fixed bottom-0 left-0 right-0 bg-white dark:bg-background-dark border-t border-primary/10 px-4 pb-6 pt-3 z-30">
+<div class="flex justify-between items-center max-w-md mx-auto">
+<a class="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="text-[10px] font-medium">Home</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">auto_stories</span>
+<span class="text-[10px] font-medium">Bible</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined filled-icon">edit_note</span>
+<span class="text-[10px] font-bold">Journal</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">self_improvement</span>
+<span class="text-[10px] font-medium">Retreat</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">account_circle</span>
+<span class="text-[10px] font-medium">Profile</span>
+</a>
+</div>
+</nav>
+</body></html>

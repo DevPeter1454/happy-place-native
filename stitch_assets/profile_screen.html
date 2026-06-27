@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Happy Place - Profile</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Playfair+Display:wght@700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#8a6e47",
+                        "background-light": "#f7f7f6",
+                        "background-dark": "#1c1a16",
+                        "surface": "#ffffff",
+                        "neutral-text": "#2E2E2E"
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "header": ["Playfair Display", "serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.5rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .header-font {
+            font-family: 'Playfair Display', serif;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100">
+<div class="relative flex min-h-screen w-full max-w-md mx-auto flex-col bg-background-light dark:bg-background-dark overflow-x-hidden pb-24">
+<!-- Header -->
+<div class="sticky top-0 z-10 flex items-center bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md p-4 justify-between border-b border-primary/10">
+<div class="text-primary flex size-10 items-center justify-center cursor-pointer">
+<span class="material-symbols-outlined">arrow_back</span>
+</div>
+<h1 class="header-font text-2xl font-bold text-neutral-text dark:text-slate-100 flex-1 text-center pr-10">Profile</h1>
+</div>
+<!-- User Profile Card -->
+<div class="flex p-6">
+<div class="flex w-full flex-col gap-4 items-center bg-white dark:bg-background-dark/40 p-8 rounded-xl shadow-sm border border-primary/5">
+<div class="relative">
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full min-h-32 w-32 border-4 border-primary/10" data-alt="Professional portrait of a smiling man named David" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuD8elyt9jBN6VgtRWx24O1TIUQvbtRerOk1fIvJoXkWBECpgNa8Ec-z3w97A6cLkQtCi6UK0hZU69G70fZnaNTA8wtX90OD9Rp80YlR6Muvl6VFIZa7f7F4rBqj1ZcOHGwOvgxj8pfVMT-3QSv6xESKa6eT5eT6xGI-eg0pGgECwV_0eCX4biKkMLyyGda_tY-zKMTFDwqu16bZYxyXoaM2pcov6ehiQBgQ0LY1ItUJvOLXBEQCKGVKNzWbrvmyq1DkEERlyP8MNveC");'></div>
+<div class="absolute bottom-1 right-1 bg-primary text-white p-2 rounded-full shadow-lg border-2 border-white">
+<span class="material-symbols-outlined text-sm">edit</span>
+</div>
+</div>
+<div class="flex flex-col items-center justify-center">
+<p class="header-font text-2xl font-bold text-neutral-text dark:text-slate-100 text-center">David</p>
+<p class="text-primary/70 text-sm font-medium text-center">david@example.com</p>
+</div>
+</div>
+</div>
+<!-- Settings Section -->
+<div class="px-6 space-y-4">
+<h3 class="header-font text-xl font-bold text-neutral-text dark:text-slate-100 pb-2">Account Settings</h3>
+<!-- Reminders Toggle -->
+<div class="flex items-center gap-4 bg-white dark:bg-background-dark/40 px-5 py-4 rounded-xl shadow-sm border border-primary/5 justify-between">
+<div class="flex items-center gap-4">
+<div class="text-primary flex items-center justify-center rounded-lg bg-primary/10 shrink-0 size-10">
+<span class="material-symbols-outlined">alarm</span>
+</div>
+<div>
+<p class="text-neutral-text dark:text-slate-100 text-base font-semibold leading-none mb-1">Daily Reminders</p>
+<p class="text-primary/60 text-xs">Morning and evening prayers</p>
+</div>
+</div>
+<div class="shrink-0">
+<label class="relative flex h-[31px] w-[51px] cursor-pointer items-center rounded-full border-none bg-primary/20 p-0.5 has-[:checked]:justify-end has-[:checked]:bg-primary transition-all duration-300">
+<div class="h-full w-[27px] rounded-full bg-white shadow-md"></div>
+<input checked="" class="invisible absolute" type="checkbox"/>
+</label>
+</div>
+</div>
+<!-- Notifications Toggle -->
+<div class="flex items-center gap-4 bg-white dark:bg-background-dark/40 px-5 py-4 rounded-xl shadow-sm border border-primary/5 justify-between">
+<div class="flex items-center gap-4">
+<div class="text-primary flex items-center justify-center rounded-lg bg-primary/10 shrink-0 size-10">
+<span class="material-symbols-outlined">notifications</span>
+</div>
+<div>
+<p class="text-neutral-text dark:text-slate-100 text-base font-semibold leading-none mb-1">Push Notifications</p>
+<p class="text-primary/60 text-xs">Retreat updates and community</p>
+</div>
+</div>
+<div class="shrink-0">
+<label class="relative flex h-[31px] w-[51px] cursor-pointer items-center rounded-full border-none bg-primary/20 p-0.5 has-[:checked]:justify-end has-[:checked]:bg-primary transition-all duration-300">
+<div class="h-full w-[27px] rounded-full bg-white shadow-md"></div>
+<input class="invisible absolute" type="checkbox"/>
+</label>
+</div>
+</div>
+<!-- Other Options -->
+<div class="bg-white dark:bg-background-dark/40 rounded-xl shadow-sm border border-primary/5 overflow-hidden">
+<div class="flex items-center gap-4 px-5 py-4 justify-between border-b border-primary/5 cursor-pointer hover:bg-primary/5 transition-colors">
+<div class="flex items-center gap-4">
+<div class="text-primary flex items-center justify-center rounded-lg bg-primary/10 shrink-0 size-10">
+<span class="material-symbols-outlined">person</span>
+</div>
+<p class="text-neutral-text dark:text-slate-100 text-base font-medium">Personal Information</p>
+</div>
+<span class="material-symbols-outlined text-primary/40">chevron_right</span>
+</div>
+<div class="flex items-center gap-4 px-5 py-4 justify-between border-b border-primary/5 cursor-pointer hover:bg-primary/5 transition-colors">
+<div class="flex items-center gap-4">
+<div class="text-primary flex items-center justify-center rounded-lg bg-primary/10 shrink-0 size-10">
+<span class="material-symbols-outlined">security</span>
+</div>
+<p class="text-neutral-text dark:text-slate-100 text-base font-medium">Privacy &amp; Security</p>
+</div>
+<span class="material-symbols-outlined text-primary/40">chevron_right</span>
+</div>
+<div class="flex items-center gap-4 px-5 py-4 justify-between cursor-pointer hover:bg-primary/5 transition-colors">
+<div class="flex items-center gap-4">
+<div class="text-primary flex items-center justify-center rounded-lg bg-primary/10 shrink-0 size-10">
+<span class="material-symbols-outlined">help</span>
+</div>
+<p class="text-neutral-text dark:text-slate-100 text-base font-medium">Support Center</p>
+</div>
+<span class="material-symbols-outlined text-primary/40">chevron_right</span>
+</div>
+</div>
+</div>
+<!-- Logout Button -->
+<div class="mt-8 px-6">
+<button class="w-full bg-primary/10 text-primary font-bold py-4 rounded-xl hover:bg-primary hover:text-white transition-all duration-300 flex items-center justify-center gap-2">
+<span class="material-symbols-outlined">logout</span>
+                Logout
+            </button>
+<p class="text-center text-primary/40 text-xs mt-6 mb-8 uppercase tracking-widest font-bold">Happy Place v2.4.0</p>
+</div>
+<!-- Bottom Navigation -->
+<div class="fixed bottom-0 left-0 right-0 max-w-md mx-auto z-20 flex gap-2 border-t border-primary/10 bg-white/95 dark:bg-background-dark/95 backdrop-blur-md px-4 pb-6 pt-3">
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-primary/50 dark:text-slate-400" href="#">
+<span class="material-symbols-outlined text-2xl">home</span>
+<p class="text-[10px] font-bold uppercase tracking-wider">Home</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-primary/50 dark:text-slate-400" href="#">
+<span class="material-symbols-outlined text-2xl">menu_book</span>
+<p class="text-[10px] font-bold uppercase tracking-wider">Bible</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-primary/50 dark:text-slate-400" href="#">
+<span class="material-symbols-outlined text-2xl">edit_note</span>
+<p class="text-[10px] font-bold uppercase tracking-wider">Journal</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-primary/50 dark:text-slate-400" href="#">
+<span class="material-symbols-outlined text-2xl">eco</span>
+<p class="text-[10px] font-bold uppercase tracking-wider">Retreat</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined text-2xl" style="font-variation-settings: 'FILL' 1;">person</span>
+<p class="text-[10px] font-bold uppercase tracking-wider">Profile</p>
+<div class="w-1 h-1 rounded-full bg-primary mt-0.5"></div>
+</a>
+</div>
+</div>
+</body></html>

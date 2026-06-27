@@ -28,6 +28,7 @@ export function MainTabNavigator() {
         tabBarInactiveTintColor: '#94A3B8',
         tabBarLabelStyle: styles.tabLabel,
         tabBarItemStyle: styles.tabItem,
+        animation: 'fade',
       }}
     >
       <Tab.Screen

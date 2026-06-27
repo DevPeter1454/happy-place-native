@@ -1,73 +1,24 @@
 import React from "react";
-import { View, Text, ScrollView, Pressable, StyleSheet } from "react-native";
+import { View, Text, ScrollView, Pressable, StyleSheet, Switch } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { MotiView } from "moti";
-import {
-  Settings,
-  ChevronRight,
-  Bell,
-  Shield,
-  CircleHelp,
-  LogOut,
-  Award,
-  Calendar,
-  Heart,
-  ChevronLeft,
-} from "lucide-react-native";
-import {
-  colors,
-  fontFamilies,
-  fontSizes,
-  spacing,
-  radii,
-  shadows,
-} from "../theme";
+import { ChevronRight, Bell, Shield, CircleHelp, LogOut, ChevronLeft, User, Pencil } from "lucide-react-native";
+import { colors, fontFamilies, fontSizes, spacing, radii, shadows } from "../theme";
 
-/**
- * Profile Screen
- * Integrated from Stitch ID: e2445a39d0e449538fe33d674f9bc7b2
- */
 export function ProfileScreen() {
   const insets = useSafeAreaInsets();
-
-  const menuItems = [
-    {
-      id: "notifications",
-      icon: <Bell size={20} color={colors.primary} />,
-      label: "Notifications",
-      subtitle: "Daily reminders & updates",
-    },
-    {
-      id: "privacy",
-      icon: <Shield size={20} color={colors.primary} />,
-      label: "Privacy & Security",
-      subtitle: "Manage your data & account",
-    },
-    {
-      id: "help",
-      icon: <CircleHelp size={20} color={colors.primary} />,
-      label: "Help & Support",
-      subtitle: "FAQs & contact us",
-    },
-  ];
+  const [remindersEnabled, setRemindersEnabled] = React.useState(true);
+  const [notificationsEnabled, setNotificationsEnabled] = React.useState(false);
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View
-        style={[
-          styles.header,
-          { paddingTop: Math.max(insets.top, spacing.md) },
-        ]}
-      >
+      <View style={[styles.header, { paddingTop: Math.max(insets.top, spacing.md) }]}>
         <Pressable style={styles.headerButton}>
           <ChevronLeft size={24} color={colors.primary} />
         </Pressable>
         <Text style={styles.headerTitle}>Profile</Text>
-        <Pressable style={styles.headerButton}>
-          <Settings size={24} color={colors.primary} />
-        </Pressable>
+        <View style={styles.headerButton} />
       </View>
 
       <ScrollView
@@ -82,84 +33,98 @@ export function ProfileScreen() {
           animate={{ opacity: 1, translateY: 0 }}
           transition={{ type: "timing", duration: 600 }}
         >
-          {/* Profile Header Card */}
           <View style={styles.profileCard}>
-            <View style={styles.avatarWrapper}>
-              <Image
-                source={{
-                  uri: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=200",
-                }}
-                style={styles.avatar}
-              />
-              <View style={styles.onlineBadge} />
+            <View style={styles.avatarContainer}>
+              <View style={styles.avatarBorder}>
+                <Image
+                  source={{
+                    uri: "https://lh3.googleusercontent.com/aida-public/AB6AXuD8elyt9jBN6VgtRWx24O1TIUQvbtRerOk1fIvJoXkWBECpgNa8Ec-z3w97A6cLkQtCi6UK0hZU69G70fZnaNTA8wtX90OD9Rp80YlR6Muvl6VFIZa7f7F4rBqj1ZcOHGwOvgxj8pfVMT-3QSv6xESKa6eT5eT6xGI-eg0pGgECwV_0eCX4biKkMLyyGda_tY-zKMTFDwqu16bZYxyXoaM2pcov6ehiQBgQ0LY1ItUJvOLXBEQCKGVKNzWbrvmyq1DkEERlyP8MNveC",
+                  }}
+                  style={styles.avatar}
+                />
+              </View>
+              <Pressable style={styles.editBadge}>
+                <Pencil size={12} color={colors.white} />
+              </Pressable>
             </View>
             <View style={styles.userInfo}>
-              <Text style={styles.userName}>Peter Peterson</Text>
-              <Text style={styles.userRole}>Premium Member</Text>
-            </View>
-            <Pressable style={styles.editProfileButton}>
-              <Text style={styles.editProfileText}>Edit Profile</Text>
-            </Pressable>
-          </View>
-
-          {/* Stats Grid */}
-          <View style={styles.statsGrid}>
-            <View style={styles.statBox}>
-              <View
-                style={[styles.statIconCircle, { backgroundColor: "#F0F9FF" }]}
-              >
-                <Calendar size={20} color="#0EA5E9" />
-              </View>
-              <Text style={styles.statValue}>45</Text>
-              <Text style={styles.statLabel}>Day Streak</Text>
-            </View>
-            <View style={styles.statBox}>
-              <View
-                style={[styles.statIconCircle, { backgroundColor: "#F0FDF4" }]}
-              >
-                <Award size={20} color="#22C55E" />
-              </View>
-              <Text style={styles.statValue}>12</Text>
-              <Text style={styles.statLabel}>Badges</Text>
-            </View>
-            <View style={styles.statBox}>
-              <View
-                style={[styles.statIconCircle, { backgroundColor: "#FFF1F2" }]}
-              >
-                <Heart size={20} color="#F43F5E" />
-              </View>
-              <Text style={styles.statValue}>128</Text>
-              <Text style={styles.statLabel}>Prayers</Text>
+              <Text style={styles.userName}>David</Text>
+              <Text style={styles.userEmail}>david@example.com</Text>
             </View>
           </View>
 
-          {/* Menu Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Preferences</Text>
+            <Text style={styles.sectionTitle}>Account Settings</Text>
+
+            <View style={styles.settingItem}>
+              <View style={styles.settingItemLeft}>
+                <View style={styles.iconBox}>
+                  <Bell size={20} color={colors.primary} />
+                </View>
+                <View>
+                  <Text style={styles.settingLabel}>Daily Reminders</Text>
+                  <Text style={styles.settingSubtitle}>Morning and evening prayers</Text>
+                </View>
+              </View>
+              <Switch
+                value={remindersEnabled}
+                onValueChange={setRemindersEnabled}
+                trackColor={{ false: "#E5E5E5", true: colors.primary }}
+                thumbColor={colors.white}
+              />
+            </View>
+
+            <View style={styles.settingItem}>
+              <View style={styles.settingItemLeft}>
+                <View style={styles.iconBox}>
+                  <Bell size={20} color={colors.primary} />
+                </View>
+                <View>
+                  <Text style={styles.settingLabel}>Push Notifications</Text>
+                  <Text style={styles.settingSubtitle}>Retreat updates and community</Text>
+                </View>
+              </View>
+              <Switch
+                value={notificationsEnabled}
+                onValueChange={setNotificationsEnabled}
+                trackColor={{ false: "#E5E5E5", true: colors.primary }}
+                thumbColor={colors.white}
+              />
+            </View>
+
             <View style={styles.menuContainer}>
-              {menuItems.map((item, index) => (
-                <Pressable
-                  key={item.id}
-                  style={({ pressed }) => [
-                    styles.menuItem,
-                    pressed && styles.menuItemPressed,
-                    index !== menuItems.length - 1 && styles.menuItemDivider,
-                  ]}
-                >
-                  <View style={styles.menuItemLeft}>
-                    <View style={styles.menuIconBox}>{item.icon}</View>
-                    <View>
-                      <Text style={styles.menuLabel}>{item.label}</Text>
-                      <Text style={styles.menuSubtitle}>{item.subtitle}</Text>
-                    </View>
+              <Pressable style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed, styles.menuItemDivider]}>
+                <View style={styles.menuItemLeft}>
+                  <View style={styles.iconBox}>
+                    <User size={20} color={colors.primary} />
                   </View>
-                  <ChevronRight size={18} color={colors.textMuted} />
-                </Pressable>
-              ))}
+                  <Text style={styles.menuLabel}>Personal Information</Text>
+                </View>
+                <ChevronRight size={18} color={colors.textMuted} />
+              </Pressable>
+
+              <Pressable style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed, styles.menuItemDivider]}>
+                <View style={styles.menuItemLeft}>
+                  <View style={styles.iconBox}>
+                    <Shield size={20} color={colors.primary} />
+                  </View>
+                  <Text style={styles.menuLabel}>Privacy & Security</Text>
+                </View>
+                <ChevronRight size={18} color={colors.textMuted} />
+              </Pressable>
+
+              <Pressable style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed]}>
+                <View style={styles.menuItemLeft}>
+                  <View style={styles.iconBox}>
+                    <CircleHelp size={20} color={colors.primary} />
+                  </View>
+                  <Text style={styles.menuLabel}>Support Center</Text>
+                </View>
+                <ChevronRight size={18} color={colors.textMuted} />
+              </Pressable>
             </View>
           </View>
 
-          {/* Logout Section */}
           <View style={styles.logoutSection}>
             <Pressable
               style={({ pressed }) => [
@@ -167,10 +132,10 @@ export function ProfileScreen() {
                 pressed && styles.logoutButtonPressed,
               ]}
             >
-              <LogOut size={20} color="#EF4444" />
-              <Text style={styles.logoutText}>Sign Out</Text>
+              <LogOut size={20} color={colors.primary} />
+              <Text style={styles.logoutText}>Logout</Text>
             </Pressable>
-            <Text style={styles.versionInfo}>App Version 1.0.2 (240504)</Text>
+            <Text style={styles.versionInfo}>HAPPY PLACE V2.4.0</Text>
           </View>
         </MotiView>
       </ScrollView>
@@ -189,7 +154,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.md,
-    backgroundColor: colors.background,
+    backgroundColor: "rgba(248, 246, 242, 0.8)",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(138, 110, 71, 0.1)",
   },
   headerButton: {
     width: 44,
@@ -199,133 +166,115 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   headerTitle: {
-    fontFamily: fontFamilies.sans,
-    fontSize: fontSizes.xl,
+    fontFamily: fontFamilies.serif,
+    fontSize: 24,
     fontWeight: "700",
     color: colors.textPrimary,
+    flex: 1,
+    textAlign: "center",
   },
   scrollContent: {
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.md,
   },
   profileCard: {
-    backgroundColor: colors.white,
-    borderRadius: radii["2xl"],
     padding: spacing.xl,
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: colors.primaryLight05,
-    ...shadows.md,
     marginBottom: spacing.xl,
   },
-  avatarWrapper: {
+  avatarContainer: {
     position: "relative",
-    marginBottom: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  avatarBorder: {
+    padding: 4,
+    borderRadius: radii.full,
+    borderWidth: 4,
+    borderColor: "rgba(138, 110, 71, 0.1)",
   },
   avatar: {
-    width: 90,
-    height: 90,
+    width: 120,
+    height: 120,
     borderRadius: radii.full,
-    borderWidth: 3,
-    borderColor: colors.white,
   },
-  onlineBadge: {
+  editBadge: {
     position: "absolute",
     bottom: 4,
     right: 4,
-    width: 18,
-    height: 18,
+    backgroundColor: colors.primary,
+    width: 32,
+    height: 32,
     borderRadius: radii.full,
-    backgroundColor: "#22C55E",
-    borderWidth: 3,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
     borderColor: colors.white,
+    ...shadows.sm,
   },
   userInfo: {
     alignItems: "center",
-    marginBottom: spacing.lg,
   },
   userName: {
-    fontFamily: fontFamilies.sans,
-    fontSize: fontSizes["2xl"],
+    fontFamily: fontFamilies.serif,
+    fontSize: 28,
     fontWeight: "700",
     color: colors.textPrimary,
     marginBottom: 4,
   },
-  userRole: {
+  userEmail: {
     fontFamily: fontFamilies.sans,
     fontSize: fontSizes.sm,
     color: colors.primary,
-    fontWeight: "600",
-  },
-  editProfileButton: {
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.full,
-    backgroundColor: colors.primaryLight05,
-    borderWidth: 1,
-    borderColor: colors.primaryLight,
-  },
-  editProfileText: {
-    fontFamily: fontFamilies.sans,
-    fontSize: fontSizes.sm,
-    fontWeight: "600",
-    color: colors.primary,
-  },
-  statsGrid: {
-    flexDirection: "row",
-    gap: spacing.md,
-    marginBottom: spacing["2xl"],
-  },
-  statBox: {
-    flex: 1,
-    backgroundColor: colors.white,
-    borderRadius: radii.xl,
-    padding: spacing.md,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: colors.primaryLight05,
-    ...shadows.sm,
-  },
-  statIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: radii.full,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: spacing.sm,
-  },
-  statValue: {
-    fontFamily: fontFamilies.sans,
-    fontSize: fontSizes.lg,
-    fontWeight: "700",
-    color: colors.textPrimary,
-  },
-  statLabel: {
-    fontFamily: fontFamilies.sans,
-    fontSize: 10,
-    color: colors.textSecondary,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    opacity: 0.7,
+    fontWeight: "500",
   },
   section: {
-    marginBottom: spacing["2xl"],
+    marginBottom: spacing.xl,
   },
   sectionTitle: {
-    fontFamily: fontFamilies.sans,
-    fontSize: fontSizes.sm,
+    fontFamily: fontFamilies.serif,
+    fontSize: fontSizes.xl,
     fontWeight: "700",
-    color: colors.textSecondary,
+    color: colors.textPrimary,
     marginBottom: spacing.md,
-    textTransform: "uppercase",
-    letterSpacing: 1,
+  },
+  settingItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: colors.white,
+    padding: spacing.lg,
+    borderRadius: radii.xl,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: "rgba(138, 110, 71, 0.05)",
+    ...shadows.sm,
+  },
+  settingItemLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    flex: 1,
+  },
+  settingLabel: {
+    fontFamily: fontFamilies.sans,
+    fontSize: fontSizes.base,
+    fontWeight: "600",
+    color: colors.textPrimary,
+    marginBottom: 2,
+  },
+  settingSubtitle: {
+    fontFamily: fontFamilies.sans,
+    fontSize: 12,
+    color: colors.textMuted,
   },
   menuContainer: {
     backgroundColor: colors.white,
     borderRadius: radii.xl,
     borderWidth: 1,
-    borderColor: colors.primaryLight05,
+    borderColor: "rgba(138, 110, 71, 0.05)",
     overflow: "hidden",
+    marginTop: spacing.md,
     ...shadows.sm,
   },
   menuItem: {
@@ -335,51 +284,43 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   menuItemPressed: {
-    backgroundColor: colors.background,
+    backgroundColor: "rgba(138, 110, 71, 0.05)",
   },
   menuItemDivider: {
     borderBottomWidth: 1,
-    borderBottomColor: colors.primaryLight05,
+    borderBottomColor: "rgba(138, 110, 71, 0.05)",
   },
   menuItemLeft: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.md,
   },
-  menuIconBox: {
+  iconBox: {
     width: 40,
     height: 40,
     borderRadius: radii.lg,
-    backgroundColor: "rgba(138, 110, 71, 0.08)",
+    backgroundColor: "rgba(138, 110, 71, 0.1)",
     alignItems: "center",
     justifyContent: "center",
   },
   menuLabel: {
     fontFamily: fontFamilies.sans,
     fontSize: fontSizes.base,
-    fontWeight: "600",
+    fontWeight: "500",
     color: colors.textPrimary,
   },
-  menuSubtitle: {
-    fontFamily: fontFamilies.sans,
-    fontSize: fontSizes.xs,
-    color: colors.textMuted,
-  },
   logoutSection: {
-    alignItems: "center",
     marginTop: spacing.md,
+    alignItems: "center",
   },
   logoutButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: spacing.sm,
-    backgroundColor: "#FEF2F2",
+    backgroundColor: "rgba(138, 110, 71, 0.1)",
     paddingVertical: spacing.lg,
-    paddingHorizontal: spacing["2xl"],
     borderRadius: radii.xl,
-    borderWidth: 1,
-    borderColor: "#FEE2E2",
     width: "100%",
   },
   logoutButtonPressed: {
@@ -389,13 +330,15 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.sans,
     fontSize: fontSizes.base,
     fontWeight: "700",
-    color: "#EF4444",
+    color: colors.primary,
   },
   versionInfo: {
     fontFamily: fontFamilies.sans,
     fontSize: 10,
-    color: colors.textMuted,
+    color: "rgba(138, 110, 71, 0.4)",
+    fontWeight: "700",
     marginTop: spacing.xl,
+    letterSpacing: 1.5,
     textAlign: "center",
   },
 });
