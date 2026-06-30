@@ -15,6 +15,8 @@ import type { Timestamp } from 'firebase/firestore';
 
 export interface UserPreferences {
   notifications: boolean;
+  /** Daily prayer reminder time as "HH:MM" (24h), e.g. "20:00". */
+  reminderTime?: string;
 }
 
 export interface UserProfile {
@@ -44,6 +46,8 @@ export interface SpiritualActivity {
   date: Timestamp;
   durationMinutes?: number;
   notes?: string;
+  /** User-marked completion (e.g. a confession affirmation they've spoken). */
+  completed?: boolean;
   createdAt: Timestamp;
 }
 
@@ -70,6 +74,47 @@ export interface NewJournalInput {
   title?: string;
   body: string;
   mood?: string;
+}
+
+/** A single verse within a fetched Bible passage. */
+export interface BibleVerse {
+  verse: number;
+  text: string;
+}
+
+/**
+ * The shared daily reading. Derived deterministically from the calendar date
+ * (see services/bible.service) so every user sees the same passage on a day.
+ */
+export interface DailyReading {
+  /** Local YYYY-MM-DD this reading is for. */
+  dateKey: string;
+  /** Human reference of the full passage, e.g. "Psalm 23". */
+  reference: string;
+  /** Translation name returned by the API, e.g. "World English Bible". */
+  translationName: string;
+  /** Every verse of the passage, for the reader. */
+  verses: BibleVerse[];
+  /** The short "verse of the day" featured on the home dashboard. */
+  votd: { reference: string; text: string };
+}
+
+/** Highlight palette available in the Bible reader. */
+export type HighlightColor = 'yellow' | 'green' | 'blue' | 'pink' | 'orange';
+
+/**
+ * A user's annotation on a single verse (highlight color and/or bookmark).
+ * Stored at users/{uid}/bibleVerses/{id}; identified by passage + verse so it
+ * is translation-independent.
+ */
+export interface VerseAnnotation {
+  /** Passage the verse belongs to, e.g. "Psalm 23". */
+  reference: string;
+  verse: number;
+  /** Highlight color, or null/absent if not highlighted. */
+  highlight?: HighlightColor | null;
+  bookmarked?: boolean;
+  updatedAt?: Timestamp;
 }
 
 /** Single summary document per user, updated as activities are logged. */

@@ -6,15 +6,56 @@ import { MotiView } from "moti";
 import { ChevronRight, Bell, Shield, CircleHelp, LogOut, ChevronLeft, User, Pencil } from "lucide-react-native";
 import { colors, fontFamilies, fontSizes, spacing, radii, shadows } from "../theme";
 import { useAuth } from "../context/AuthContext";
+import { useTabBarVisibility } from "../context/TabBarContext";
+import { updateProfile } from "../services/user.service";
+import {
+  ensurePermissions,
+  scheduleDailyPrayerReminder,
+  cancelPrayerReminder,
+} from "../services/notifications.service";
+
+const DEFAULT_REMINDER = "20:00";
 
 const FALLBACK_AVATAR =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuD8elyt9jBN6VgtRWx24O1TIUQvbtRerOk1fIvJoXkWBECpgNa8Ec-z3w97A6cLkQtCi6UK0hZU69G70fZnaNTA8wtX90OD9Rp80YlR6Muvl6VFIZa7f7F4rBqj1ZcOHGwOvgxj8pfVMT-3QSv6xESKa6eT5eT6xGI-eg0pGgECwV_0eCX4biKkMLyyGda_tY-zKMTFDwqu16bZYxyXoaM2pcov6ehiQBgQ0LY1ItUJvOLXBEQCKGVKNzWbrvmyq1DkEERlyP8MNveC";
 
 export function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { user, profile, signOut } = useAuth();
-  const [remindersEnabled, setRemindersEnabled] = React.useState(true);
+  const { user, profile, signOut, refreshProfile } = useAuth();
+  const { onScroll } = useTabBarVisibility();
+  const [savingReminder, setSavingReminder] = React.useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = React.useState(false);
+
+  // Reflects the persisted preference; the prayer reminder is gated on this.
+  const remindersEnabled = profile?.preferences?.notifications ?? true;
+
+  const toggleReminders = async (value: boolean) => {
+    if (!user?.uid || savingReminder) return;
+    setSavingReminder(true);
+    try {
+      await updateProfile(user.uid, {
+        preferences: {
+          ...(profile?.preferences ?? { notifications: true }),
+          notifications: value,
+        },
+      });
+      await refreshProfile();
+      if (value) {
+        const granted = await ensurePermissions();
+        if (granted) {
+          await scheduleDailyPrayerReminder(
+            profile?.preferences?.reminderTime ?? DEFAULT_REMINDER,
+          );
+        }
+      } else {
+        await cancelPrayerReminder();
+      }
+    } catch {
+      // Best-effort: refreshProfile keeps the switch in sync with what persisted.
+    } finally {
+      setSavingReminder(false);
+    }
+  };
 
   const displayName = profile?.fullName ?? user?.displayName ?? "Friend";
   const displayEmail = profile?.email ?? user?.email ?? "";
@@ -31,6 +72,8 @@ export function ProfileScreen() {
       </View>
 
       <ScrollView
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         contentContainerStyle={[
           styles.scrollContent,
           { paddingBottom: Math.max(insets.bottom, spacing.xl) },
@@ -74,7 +117,8 @@ export function ProfileScreen() {
               </View>
               <Switch
                 value={remindersEnabled}
-                onValueChange={setRemindersEnabled}
+                onValueChange={toggleReminders}
+                disabled={savingReminder}
                 trackColor={{ false: "#E5E5E5", true: colors.primary }}
                 thumbColor={colors.white}
               />

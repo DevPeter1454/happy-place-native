@@ -30,7 +30,9 @@
     },
     "plugins": [
       "expo-image",
-      "expo-font"
+      "expo-font",
+      "expo-notifications",
+      "@react-native-community/datetimepicker"
     ]
   }
 }

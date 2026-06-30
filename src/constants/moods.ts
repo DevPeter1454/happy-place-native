@@ -9,22 +9,30 @@
 export interface Mood {
   label: string;
   emoji: string;
-  /** Comma-separated keywords used for the LoremFlickr (keyword) source. */
-  imageKeywords: string;
+  /**
+   * Varied keyword sets used for the LoremFlickr source. Mixing close-ups,
+   * objects and textures with scenery keeps the feed from being all wide
+   * landscape shots.
+   */
+  imageKeywords: string[];
   /** Hand-picked Unsplash photos that fit the mood. */
   images: string[];
 }
 
-/** Build a sized, optimized Unsplash URL from a raw photo id. */
+/**
+ * Build a square, optimized Unsplash URL from a raw photo id. A square crop
+ * (rather than the photo's native, usually-wide ratio) reads less like a
+ * landscape and sits better in the card/thumbnail frames.
+ */
 function unsplash(id: string): string {
-  return `https://images.unsplash.com/photo-${id}?q=80&w=800&auto=format&fit=crop`;
+  return `https://images.unsplash.com/photo-${id}?q=80&w=600&h=600&fit=crop&crop=entropy&auto=format`;
 }
 
 export const MOODS: Mood[] = [
   {
     label: 'Grateful',
     emoji: '🙏',
-    imageKeywords: 'sunrise,nature',
+    imageKeywords: ['gratitude,candle', 'flowers,bouquet', 'hands,prayer'],
     images: [
       unsplash('1470071459604-3b5ec3a7fe05'),
       unsplash('1500534623283-312aade485b7'),
@@ -33,7 +41,7 @@ export const MOODS: Mood[] = [
   {
     label: 'Peaceful',
     emoji: '😌',
-    imageKeywords: 'calm,lake',
+    imageKeywords: ['tea,cup', 'candle,still', 'meditation,zen'],
     images: [
       unsplash('1501785888041-af3ef285b470'),
       unsplash('1439066615861-d1af74d74000'),
@@ -42,7 +50,7 @@ export const MOODS: Mood[] = [
   {
     label: 'Hopeful',
     emoji: '🌅',
-    imageKeywords: 'sky,horizon',
+    imageKeywords: ['light,window', 'sprout,plant', 'open,book'],
     images: [
       unsplash('1504608524841-42fe6f032b4b'),
       unsplash('1490730141103-6cac27aaab94'),
@@ -51,7 +59,7 @@ export const MOODS: Mood[] = [
   {
     label: 'Joyful',
     emoji: '😊',
-    imageKeywords: 'flowers,sunshine',
+    imageKeywords: ['flowers,closeup', 'confetti,color', 'balloons,party'],
     images: [
       unsplash('1490750967868-88aa4486c946'),
       unsplash('1462275646964-a0e3386b89fa'),
@@ -60,7 +68,7 @@ export const MOODS: Mood[] = [
   {
     label: 'Reflective',
     emoji: '🤔',
-    imageKeywords: 'forest,mist',
+    imageKeywords: ['book,coffee', 'journal,desk', 'rain,window'],
     images: [
       unsplash('1504052434569-70ad5836ab65'),
       unsplash('1448375240586-882707db888b'),
@@ -69,7 +77,7 @@ export const MOODS: Mood[] = [
   {
     label: 'Struggling',
     emoji: '💧',
-    imageKeywords: 'rain,ocean',
+    imageKeywords: ['rain,window', 'candle,dark', 'quiet,solitude'],
     images: [
       unsplash('1428592953211-077101b2021b'),
       unsplash('1500674425229-f692875b0ab7'),
@@ -95,18 +103,22 @@ function hashString(input: string): number {
 
 /**
  * A picture that fits the entry's feeling. We rotate across two sources — the
- * mood's curated Unsplash photos and a keyword-matched LoremFlickr image — so
- * the feed stays varied. The per-entry hash keeps the choice (and the
- * LoremFlickr `lock`) stable, so an entry always shows the same picture.
+ * mood's curated Unsplash photos and several keyword-matched LoremFlickr images
+ * (varied subjects, square crop) — so the feed stays varied and isn't dominated
+ * by wide landscape shots. The per-entry hash keeps the choice stable, so an
+ * entry always shows the same picture.
  */
 export function imageForEntry(seed: string, mood?: string): string {
-  // Fall back to a default mood so entries without one still rotate across
-  // curated photos rather than only ever showing a LoremFlickr image.
+  // Fall back to a default mood so entries without one still get the full pool.
   const m = getMood(mood) ?? DEFAULT_MOOD;
   const hash = hashString(seed);
-  const loremflickr = `https://loremflickr.com/640/480/${m.imageKeywords}?lock=${hash}`;
 
-  // Pool = curated Unsplash photos + the LoremFlickr fallback; pick one by hash.
-  const pool = [...m.images, loremflickr];
+  const loremflickr = m.imageKeywords.map(
+    (kw, i) => `https://loremflickr.com/600/600/${kw}?lock=${hash + i}`
+  );
+
+  // Pool weights the varied keyword shots over the (landscape-leaning) curated
+  // photos, then picks one deterministically by hash.
+  const pool = [...m.images, ...loremflickr];
   return pool[hash % pool.length];
 }

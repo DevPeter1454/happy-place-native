@@ -1,13 +1,28 @@
-import React, { useMemo } from "react";
-import { View, Text, ScrollView, Pressable, StyleSheet } from "react-native";
+import React, { useCallback, useMemo, useState } from "react";
+import {
+  View,
+  Text,
+  ScrollView,
+  Pressable,
+  StyleSheet,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Platform,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
 import { MotiView } from "moti";
+import DateTimePicker, {
+  type DateTimePickerEvent,
+} from "@react-native-community/datetimepicker";
 import {
   ArrowLeft,
   Settings,
   BellRing,
   CheckCircle2,
-  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react-native";
 import {
   colors,
@@ -17,26 +32,38 @@ import {
   radii,
   shadows,
 } from "../theme";
+import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
+import {
+  listActivities,
+  addActivity,
+  getStats,
+} from "../services/activities.service";
+import { updateProfile } from "../services/user.service";
+import {
+  ensurePermissions,
+  scheduleDailyPrayerReminder,
+} from "../services/notifications.service";
+import type { SpiritualActivity, UserStats } from "../types/models";
 import type { RootStackScreenProps } from "../navigation/types";
 
-// --- Mock data ---
-const MONTH_NAME = "October 2023";
-const DAYS_IN_MONTH = 28; // 4-week calendar for simplicity
-const FIRST_DAY_OFFSET = 0; // Monday start
-const COMPLETED_DAYS = [
-  1, 2, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21, 22, 23,
-];
-const MISSED_DAYS = [6, 17];
-const TODAY = 24;
 const DAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
+const DEFAULT_REMINDER = "20:00";
 
 type DayStatus = "completed" | "missed" | "today" | "future";
 
-function getDayStatus(day: number): DayStatus {
-  if (day === TODAY) return "today";
-  if (COMPLETED_DAYS.includes(day)) return "completed";
-  if (MISSED_DAYS.includes(day)) return "missed";
-  return "future";
+function pad(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+/** Format a "HH:MM" 24h string as a friendly 12h label, e.g. "8:00 PM". */
+function formatTime(time: string): string {
+  const [h, m] = time.split(":").map((p) => parseInt(p, 10));
+  const hour = Number.isFinite(h) ? h : 20;
+  const minute = Number.isFinite(m) ? m : 0;
+  const period = hour >= 12 ? "PM" : "AM";
+  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+  return `${hour12}:${pad(minute)} ${period}`;
 }
 
 // --- Stat Pill Component ---
@@ -191,13 +218,210 @@ export function PrayerTrackerScreen({
   navigation,
 }: RootStackScreenProps<"PrayerTracker">) {
   const insets = useSafeAreaInsets();
+  const { user, profile, refreshProfile } = useAuth();
+  const { showToast } = useToast();
 
-  const days = Array.from({ length: DAYS_IN_MONTH }, (_, i) => i + 1);
-  const totalCompleted = COMPLETED_DAYS.length;
-  const totalMissed = MISSED_DAYS.length;
-  const consistency = Math.round(
-    (totalCompleted / (totalCompleted + totalMissed)) * 100,
+  const [activities, setActivities] = useState<SpiritualActivity[]>([]);
+  const [stats, setStats] = useState<UserStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  // Tracks an in-flight optimistic "logged today" before the reload lands.
+  const [optimisticToday, setOptimisticToday] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerValue, setPickerValue] = useState(new Date());
+
+  const reminderTime = profile?.preferences?.reminderTime ?? DEFAULT_REMINDER;
+
+  // Load this user's prayer activities + aggregate stats whenever focused.
+  useFocusEffect(
+    useCallback(() => {
+      if (!user?.uid) {
+        setActivities([]);
+        setStats(null);
+        setLoading(false);
+        return;
+      }
+      let active = true;
+      setLoading(true);
+      Promise.all([listActivities(user.uid, "prayer"), getStats(user.uid)])
+        .then(([acts, s]) => {
+          if (!active) return;
+          setActivities(acts);
+          setStats(s);
+        })
+        .catch(() => {
+          if (!active) return;
+          setActivities([]);
+          setStats(null);
+        })
+        .finally(() => active && setLoading(false));
+      return () => {
+        active = false;
+      };
+    }, [user?.uid]),
   );
+
+  // "Now", captured once per mount — defines today and the latest viewable month.
+  const now = useMemo(() => new Date(), []);
+  const today = now.getDate();
+
+  // The month currently being viewed; starts on the current month and can be
+  // paged backwards through history but never ahead of the current month.
+  const [view, setView] = useState({
+    year: now.getFullYear(),
+    month: now.getMonth(),
+  });
+
+  const isCurrentMonth =
+    view.year === now.getFullYear() && view.month === now.getMonth();
+  const isPastMonth =
+    view.year < now.getFullYear() ||
+    (view.year === now.getFullYear() && view.month < now.getMonth());
+
+  const daysInMonth = new Date(view.year, view.month + 1, 0).getDate();
+  // Monday-start grid: shift Sun(0)..Sat(6) so Monday is column 0.
+  const firstWeekday = (new Date(view.year, view.month, 1).getDay() + 6) % 7;
+  const monthName = new Date(view.year, view.month, 1).toLocaleString(
+    "default",
+    { month: "long", year: "numeric" },
+  );
+
+  const goPrevMonth = () =>
+    setView((v) =>
+      v.month === 0
+        ? { year: v.year - 1, month: 11 }
+        : { year: v.year, month: v.month - 1 },
+    );
+  const goNextMonth = () => {
+    if (isCurrentMonth) return; // can't view months ahead of now
+    setView((v) =>
+      v.month === 11
+        ? { year: v.year + 1, month: 0 }
+        : { year: v.year, month: v.month + 1 },
+    );
+  };
+
+  // Whether the user has already logged a prayer for the actual current day —
+  // independent of which month is being viewed.
+  const doneToday = useMemo(() => {
+    if (optimisticToday) return true;
+    return activities.some((a) => {
+      const d = a.date?.toDate?.();
+      return (
+        d &&
+        d.getFullYear() === now.getFullYear() &&
+        d.getMonth() === now.getMonth() &&
+        d.getDate() === now.getDate()
+      );
+    });
+  }, [activities, optimisticToday, now]);
+
+  // Day-of-month numbers with a logged prayer in the viewed month.
+  const completedDays = useMemo(() => {
+    const set = new Set<number>();
+    for (const a of activities) {
+      const d = a.date?.toDate?.();
+      if (d && d.getFullYear() === view.year && d.getMonth() === view.month) {
+        set.add(d.getDate());
+      }
+    }
+    if (optimisticToday && isCurrentMonth) set.add(today);
+    return set;
+  }, [activities, view, optimisticToday, isCurrentMonth, today]);
+
+  const daysCompleted = completedDays.size;
+  // Days that should have had a prayer but didn't: elapsed days of the current
+  // month, or every day of a fully-past month.
+  const daysMissed = useMemo(() => {
+    const upTo = isCurrentMonth ? today - 1 : isPastMonth ? daysInMonth : 0;
+    let missed = 0;
+    for (let d = 1; d <= upTo; d++) if (!completedDays.has(d)) missed++;
+    return missed;
+  }, [completedDays, isCurrentMonth, isPastMonth, today, daysInMonth]);
+  const consistency =
+    daysCompleted + daysMissed > 0
+      ? Math.round((daysCompleted / (daysCompleted + daysMissed)) * 100)
+      : 0;
+
+  const dayStatus = useCallback(
+    (day: number): DayStatus => {
+      if (completedDays.has(day)) return "completed";
+      if (isCurrentMonth) {
+        if (day === today) return "today";
+        return day < today ? "missed" : "future";
+      }
+      return isPastMonth ? "missed" : "future";
+    },
+    [completedDays, isCurrentMonth, isPastMonth, today],
+  );
+
+  const days = useMemo(
+    () => Array.from({ length: daysInMonth }, (_, i) => i + 1),
+    [daysInMonth],
+  );
+
+  const handleMark = async () => {
+    if (saving || !user?.uid) return;
+    if (doneToday) {
+      showToast("Already logged today");
+      return;
+    }
+    setSaving(true);
+    setOptimisticToday(true);
+    showToast("Prayer logged 🙏");
+    try {
+      await addActivity(user.uid, { type: "prayer" });
+      const [acts, s] = await Promise.all([
+        listActivities(user.uid, "prayer"),
+        getStats(user.uid),
+      ]);
+      setActivities(acts);
+      setStats(s);
+    } catch {
+      setOptimisticToday(false);
+      Alert.alert("Couldn't save", "Your prayer wasn't logged. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openPicker = () => {
+    const [h, m] = reminderTime.split(":").map((p) => parseInt(p, 10));
+    const d = new Date();
+    d.setHours(Number.isFinite(h) ? h : 20, Number.isFinite(m) ? m : 0, 0, 0);
+    setPickerValue(d);
+    setPickerOpen(true);
+  };
+
+  const persistReminder = async (date: Date) => {
+    if (!user?.uid) return;
+    const newTime = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    try {
+      const granted = await ensurePermissions();
+      await updateProfile(user.uid, {
+        preferences: {
+          ...(profile?.preferences ?? { notifications: true }),
+          reminderTime: newTime,
+        },
+      });
+      await refreshProfile();
+      if (granted) await scheduleDailyPrayerReminder(newTime);
+      showToast(
+        granted
+          ? `Reminder set for ${formatTime(newTime)}`
+          : "Saved — enable notifications to be reminded",
+      );
+    } catch {
+      Alert.alert("Couldn't update reminder", "Please try again.");
+    }
+  };
+
+  // Android shows a dialog and reports the result via onChange; iOS uses an
+  // inline spinner inside a modal with an explicit Done button.
+  const onAndroidPicked = (event: DateTimePickerEvent, date?: Date) => {
+    setPickerOpen(false);
+    if (event.type === "set" && date) persistReminder(date);
+  };
 
   return (
     <MotiView
@@ -219,6 +443,7 @@ export function PrayerTrackerScreen({
         </Pressable>
         <Text style={styles.headerTitle}>Prayer Tracker</Text>
         <Pressable
+          onPress={() => navigation.navigate("Main", { screen: "Profile" })}
           style={({ pressed }) => [
             styles.headerBtn,
             pressed && styles.headerBtnPressed,
@@ -228,98 +453,202 @@ export function PrayerTrackerScreen({
         </Pressable>
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Daily Reminder Card */}
-        <View style={styles.reminderCard}>
-          <View style={styles.reminderLeft}>
-            <View style={styles.reminderIcon}>
-              <BellRing size={22} color={colors.primary} />
+      {loading ? (
+        <View style={styles.loadingState}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      ) : (
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Daily Reminder Card */}
+          <View style={styles.reminderCard}>
+            <View style={styles.reminderLeft}>
+              <View style={styles.reminderIcon}>
+                <BellRing size={22} color={colors.primary} />
+              </View>
+              <View>
+                <Text style={styles.reminderLabel}>Daily Reminder</Text>
+                <Text style={styles.reminderTime}>{formatTime(reminderTime)}</Text>
+              </View>
             </View>
-            <View>
-              <Text style={styles.reminderLabel}>Daily Reminder</Text>
-              <Text style={styles.reminderTime}>8:00 PM</Text>
-            </View>
+            <Pressable
+              onPress={openPicker}
+              style={({ pressed }) => [
+                styles.editBtn,
+                pressed && styles.editBtnPressed,
+              ]}
+            >
+              <Text style={styles.editBtnText}>Edit</Text>
+            </Pressable>
           </View>
+
+          {/* Mark Prayer Completed Button */}
           <Pressable
+            onPress={handleMark}
+            disabled={doneToday || saving}
             style={({ pressed }) => [
-              styles.editBtn,
-              pressed && styles.editBtnPressed,
+              styles.markButton,
+              pressed && styles.markButtonPressed,
+              (doneToday || saving) && styles.markButtonDisabled,
             ]}
           >
-            <Text style={styles.editBtnText}>Edit</Text>
+            <CheckCircle2 size={22} color={colors.white} />
+            <Text style={styles.markButtonText}>
+              {doneToday
+                ? "Completed Today"
+                : saving
+                  ? "Logging…"
+                  : "Mark Prayer Completed"}
+            </Text>
           </Pressable>
-        </View>
 
-        {/* Mark Prayer Completed Button */}
-        <Pressable
-          style={({ pressed }) => [
-            styles.markButton,
-            pressed && styles.markButtonPressed,
-          ]}
+          {/* Monthly Stats */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Monthly Stats</Text>
+            <View style={styles.statsRow}>
+              <StatPill
+                value={String(daysCompleted)}
+                label="Days"
+                color={colors.primary}
+              />
+              <StatPill
+                value={String(daysMissed)}
+                label="Missed"
+                color="#CBD5E1"
+              />
+              <StatPill
+                value={`${consistency}%`}
+                label="Consistency"
+                color={colors.primaryGold}
+              />
+            </View>
+            {stats && isCurrentMonth ? (
+              <Text style={styles.streakNote}>
+                Current streak: {stats.currentStreak} day
+                {stats.currentStreak === 1 ? "" : "s"} · Longest:{" "}
+                {stats.longestStreak}
+              </Text>
+            ) : null}
+          </View>
+
+          {/* History Calendar */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>History</Text>
+              <View style={styles.monthLabel}>
+                <Pressable
+                  onPress={goPrevMonth}
+                  hitSlop={8}
+                  style={({ pressed }) => pressed && styles.monthNavPressed}
+                >
+                  <ChevronLeft size={18} color={colors.primary} />
+                </Pressable>
+                <Text style={styles.monthText}>{monthName}</Text>
+                <Pressable
+                  onPress={goNextMonth}
+                  hitSlop={8}
+                  disabled={isCurrentMonth}
+                  style={({ pressed }) => pressed && styles.monthNavPressed}
+                >
+                  <ChevronRight
+                    size={18}
+                    color={
+                      isCurrentMonth ? colors.primaryLight30 : colors.primary
+                    }
+                  />
+                </Pressable>
+              </View>
+            </View>
+
+            <View style={styles.calendarCard}>
+              {/* Day labels */}
+              <View style={styles.calendarGrid}>
+                {DAY_LABELS.map((label, i) => (
+                  <View key={`label-${i}`} style={styles.dayLabelCell}>
+                    <Text style={styles.dayLabelText}>{label}</Text>
+                  </View>
+                ))}
+
+                {/* Leading blanks so day 1 lands under its weekday */}
+                {Array.from({ length: firstWeekday }).map((_, i) => (
+                  <View key={`blank-${i}`} style={calDayStyles.wrapper} />
+                ))}
+
+                {/* Calendar days */}
+                {days.map((day) => (
+                  <CalendarDay key={day} day={day} status={dayStatus(day)} />
+                ))}
+              </View>
+
+              {/* Legend */}
+              <View style={styles.legend}>
+                <LegendItem color={colors.primary} label="Completed" />
+                <LegendItem color={colors.missedBg} label="Missed" />
+                <LegendItem borderColor={colors.primary} label="Today" />
+              </View>
+            </View>
+          </View>
+        </ScrollView>
+      )}
+
+      {/* Time picker */}
+      {pickerOpen && Platform.OS === "android" ? (
+        <DateTimePicker
+          value={pickerValue}
+          mode="time"
+          onChange={onAndroidPicked}
+        />
+      ) : null}
+
+      {Platform.OS === "ios" ? (
+        <Modal
+          visible={pickerOpen}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setPickerOpen(false)}
         >
-          <CheckCircle2 size={22} color={colors.white} />
-          <Text style={styles.markButtonText}>Mark Prayer Completed</Text>
-        </Pressable>
-
-        {/* Monthly Stats */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Monthly Stats</Text>
-          <View style={styles.statsRow}>
-            <StatPill
-              value={String(totalCompleted)}
-              label="Days"
-              color={colors.primary}
-            />
-            <StatPill
-              value={String(totalMissed)}
-              label="Missed"
-              color="#CBD5E1"
-            />
-            <StatPill
-              value={`${consistency}%`}
-              label="Consistency"
-              color={colors.primaryGold}
-            />
-          </View>
-        </View>
-
-        {/* History Calendar */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>History</Text>
-            <View style={styles.monthLabel}>
-              <Text style={styles.monthText}>{MONTH_NAME}</Text>
-              <CalendarDays size={14} color={colors.textPlaceholder} />
-            </View>
-          </View>
-
-          <View style={styles.calendarCard}>
-            {/* Day labels */}
-            <View style={styles.calendarGrid}>
-              {DAY_LABELS.map((label, i) => (
-                <View key={`label-${i}`} style={styles.dayLabelCell}>
-                  <Text style={styles.dayLabelText}>{label}</Text>
-                </View>
-              ))}
-
-              {/* Calendar days */}
-              {days.map((day) => (
-                <CalendarDay key={day} day={day} status={getDayStatus(day)} />
-              ))}
-            </View>
-
-            {/* Legend */}
-            <View style={styles.legend}>
-              <LegendItem color={colors.primary} label="Completed" />
-              <LegendItem color={colors.missedBg} label="Missed" />
-              <LegendItem borderColor={colors.primary} label="Today" />
-            </View>
-          </View>
-        </View>
-      </ScrollView>
+          <Pressable
+            style={styles.modalBackdrop}
+            onPress={() => setPickerOpen(false)}
+          >
+            <Pressable style={styles.modalCard} onPress={() => {}}>
+              <Text style={styles.modalTitle}>Daily Reminder Time</Text>
+              <DateTimePicker
+                value={pickerValue}
+                mode="time"
+                display="spinner"
+                onChange={(_e, date) => date && setPickerValue(date)}
+              />
+              <View style={styles.modalActions}>
+                <Pressable
+                  onPress={() => setPickerOpen(false)}
+                  style={({ pressed }) => [
+                    styles.modalBtn,
+                    pressed && styles.editBtnPressed,
+                  ]}
+                >
+                  <Text style={styles.modalBtnText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    setPickerOpen(false);
+                    persistReminder(pickerValue);
+                  }}
+                  style={({ pressed }) => [
+                    styles.modalBtn,
+                    styles.modalBtnPrimary,
+                    pressed && styles.markButtonPressed,
+                  ]}
+                >
+                  <Text style={styles.modalBtnTextPrimary}>Done</Text>
+                </Pressable>
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      ) : null}
     </MotiView>
   );
 }
@@ -468,6 +797,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "500",
     color: colors.textPlaceholder,
+    minWidth: 96,
+    textAlign: "center",
+  },
+  monthNavPressed: {
+    opacity: 0.5,
   },
 
   // Calendar
@@ -505,5 +839,70 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
     borderTopWidth: 1,
     borderTopColor: colors.primaryLight05,
+  },
+
+  // Loading / states
+  loadingState: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  markButtonDisabled: {
+    opacity: 0.6,
+  },
+  streakNote: {
+    fontFamily: fontFamilies.sans,
+    fontSize: fontSizes.sm,
+    color: colors.textMuted,
+    textAlign: "center",
+  },
+
+  // Time picker modal (iOS)
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  modalCard: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: radii.xl,
+    borderTopRightRadius: radii.xl,
+    padding: spacing.xl,
+    paddingBottom: spacing["2xl"],
+  },
+  modalTitle: {
+    fontFamily: fontFamilies.serif,
+    fontSize: fontSizes.xl,
+    fontWeight: "700",
+    color: colors.textPrimary,
+    textAlign: "center",
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: spacing.md,
+    marginTop: spacing.md,
+  },
+  modalBtn: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: spacing.lg,
+    borderRadius: radii.lg,
+    backgroundColor: colors.primaryLight,
+  },
+  modalBtnPrimary: {
+    backgroundColor: colors.primary,
+  },
+  modalBtnText: {
+    fontFamily: fontFamilies.sans,
+    fontSize: fontSizes.base,
+    fontWeight: "600",
+    color: colors.primary,
+  },
+  modalBtnTextPrimary: {
+    fontFamily: fontFamilies.sans,
+    fontSize: fontSizes.base,
+    fontWeight: "700",
+    color: colors.white,
   },
 });

@@ -14,6 +14,7 @@ import {
 } from "../theme";
 import type { RootStackScreenProps } from "../navigation/types";
 import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
 import { setFavorite } from "../services/journal.service";
 import { getMood, imageForEntry } from "../constants/moods";
 import { FavoriteHeart } from "../components/journal/FavoriteHeart";
@@ -24,6 +25,7 @@ export function JournalEntryDetailScreen({
 }: RootStackScreenProps<"JournalEntryDetail">) {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { showToast } = useToast();
   const { entryId, title, body, mood, createdAt, isFavorite } = route.params;
 
   const [favorite, setFavoriteState] = useState(!!isFavorite);
@@ -45,6 +47,7 @@ export function JournalEntryDetailScreen({
     if (!user?.uid) return;
     const next = !favorite;
     setFavoriteState(next); // optimistic
+    showToast(next ? "Added to favorites" : "Removed from favorites");
     setFavorite(user.uid, entryId, next).catch(() => setFavoriteState(!next));
   };
 
@@ -198,7 +201,7 @@ const styles = StyleSheet.create({
   },
   entryBody: {
     fontFamily: fontFamilies.sans,
-    fontSize: fontSizes.lg,
+    fontSize: 16,
     color: colors.textPrimary,
     lineHeight: 28,
   },

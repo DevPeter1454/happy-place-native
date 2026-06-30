@@ -7,6 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   TextInput,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
@@ -16,7 +17,9 @@ import { colors, fontFamilies, fontSizes, spacing, radii, shadows } from "../the
 import { JournalCard } from "../components/journal/JournalCard";
 import type { MainTabScreenProps } from "../navigation/types";
 import { useAuth } from "../context/AuthContext";
-import { listEntries, setFavorite } from "../services/journal.service";
+import { useToast } from "../context/ToastContext";
+import { useTabBarVisibility } from "../context/TabBarContext";
+import { listEntries, setFavorite, deleteEntry } from "../services/journal.service";
 import type { JournalEntry } from "../types/models";
 import { imageForEntry } from "../constants/moods";
 
@@ -31,6 +34,8 @@ export function JournalListScreen(_props: MainTabScreenProps<"Journal">) {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const { user } = useAuth();
+  const { showToast } = useToast();
+  const { onScroll } = useTabBarVisibility();
   const [activeTab, setActiveTab] = useState("All Entries");
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -76,11 +81,46 @@ export function JournalListScreen(_props: MainTabScreenProps<"Journal">) {
     setEntries((prev) =>
       prev.map((e) => (e.id === entry.id ? { ...e, isFavorite: next } : e))
     );
+    showToast(next ? "Added to favorites" : "Removed from favorites");
     setFavorite(user.uid, entry.id, next).catch(() => {
       setEntries((prev) =>
         prev.map((e) => (e.id === entry.id ? { ...e, isFavorite: !next } : e))
       );
     });
+  };
+
+  const removeEntry = (entry: JournalEntry) => {
+    if (!user?.uid) return;
+    // Optimistic removal; reload to restore if the delete fails.
+    setEntries((prev) => prev.filter((e) => e.id !== entry.id));
+    showToast("Reflection deleted");
+    deleteEntry(user.uid, entry.id).catch(() => {
+      if (user.uid) listEntries(user.uid).then(setEntries);
+    });
+  };
+
+  // Long-press a card → action sheet (YouVersion-style), keeping the card clean.
+  const openCardMenu = (entry: JournalEntry) => {
+    Alert.alert(entry.title?.trim() || "Reflection", undefined, [
+      {
+        text: entry.isFavorite ? "Remove from favorites" : "Add to favorites",
+        onPress: () => toggleFavorite(entry),
+      },
+      {
+        text: "Delete entry",
+        style: "destructive",
+        onPress: () =>
+          Alert.alert("Delete this reflection?", "This can't be undone.", [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Delete",
+              style: "destructive",
+              onPress: () => removeEntry(entry),
+            },
+          ]),
+      },
+      { text: "Cancel", style: "cancel" },
+    ]);
   };
 
   const now = new Date();
@@ -153,7 +193,12 @@ export function JournalListScreen(_props: MainTabScreenProps<"Journal">) {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         <MotiView
           from={{ opacity: 0, translateY: 10 }}
           animate={{ opacity: 1, translateY: 0 }}
@@ -178,6 +223,7 @@ export function JournalListScreen(_props: MainTabScreenProps<"Journal">) {
                 imageUrl={imageForEntry(entry.id, entry.mood)}
                 isFavorite={entry.isFavorite}
                 onPress={() => openEntry(entry)}
+                onLongPress={() => openCardMenu(entry)}
                 onToggleFavorite={() => toggleFavorite(entry)}
               />
             );

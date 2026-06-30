@@ -12,12 +12,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { Image } from "expo-image";
 import { MotiView } from "moti";
-import { ChevronLeft, CheckCircle2, Trash2, Plus } from "lucide-react-native";
+import { ChevronLeft, CheckCircle2, Plus } from "lucide-react-native";
 import { colors, fontFamilies, fontSizes, spacing, radii, shadows } from "../theme";
 import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
 import {
   listActivities,
   deleteActivity,
+  setActivityCompleted,
 } from "../services/activities.service";
 import type { SpiritualActivity } from "../types/models";
 import { imageForEntry } from "../constants/moods";
@@ -28,6 +30,7 @@ interface ConfessionView {
   verse?: string;
   image: string;
   date: Date;
+  completed: boolean;
 }
 
 function isSameDay(a: Date, b: Date): boolean {
@@ -53,6 +56,7 @@ function toConfession(activity: SpiritualActivity): ConfessionView {
     verse: verse || undefined,
     image: imageForEntry(activity.id),
     date: activity.date ? activity.date.toDate() : new Date(),
+    completed: !!activity.completed,
   };
 }
 
@@ -60,9 +64,9 @@ export function ConfessionListScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const { user } = useAuth();
+  const { showToast } = useToast();
   const [confessions, setConfessions] = useState<ConfessionView[]>([]);
   const [loading, setLoading] = useState(true);
-  const [completed, setCompleted] = useState<Set<string>>(new Set());
 
   useFocusEffect(
     useCallback(() => {
@@ -83,12 +87,17 @@ export function ConfessionListScreen() {
     }, [user?.uid])
   );
 
-  const toggleCompleted = (id: string) => {
-    setCompleted((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
+  const toggleCompleted = (item: ConfessionView) => {
+    if (!user?.uid) return;
+    const next = !item.completed;
+    // Optimistic update, then persist; revert on failure.
+    setConfessions((prev) =>
+      prev.map((c) => (c.id === item.id ? { ...c, completed: next } : c))
+    );
+    setActivityCompleted(user.uid, item.id, next).catch(() => {
+      setConfessions((prev) =>
+        prev.map((c) => (c.id === item.id ? { ...c, completed: !next } : c))
+      );
     });
   };
 
@@ -102,6 +111,7 @@ export function ConfessionListScreen() {
           if (!user?.uid) return;
           // Optimistic removal; reload to restore on failure.
           setConfessions((prev) => prev.filter((c) => c.id !== item.id));
+          showToast("Confession deleted");
           deleteActivity(user.uid, item.id).catch(() => {
             if (user.uid) {
               listActivities(user.uid, "confession").then((r) =>
@@ -147,7 +157,7 @@ export function ConfessionListScreen() {
         {confessions.map((item, index) => {
           // Auto-completed when it's today's task confession; otherwise manual.
           const isAuto = item.id === taskConfessionId;
-          const isDone = isAuto || completed.has(item.id);
+          const isDone = isAuto || item.completed;
           return (
             <MotiView
               key={item.id}
@@ -156,49 +166,48 @@ export function ConfessionListScreen() {
               transition={{ type: "timing", duration: 500, delay: index * 100 }}
               style={styles.card}
             >
-              <View style={styles.cardMain}>
-                <View style={styles.cardTextContainer}>
-                  <Text style={styles.cardText}>{item.text}</Text>
-                  {!!item.verse && (
-                    <Text style={styles.cardVerse}>{item.verse}</Text>
-                  )}
+              {/* Long-press the card to delete (YouVersion-style action). */}
+              <Pressable
+                onLongPress={() => confirmDelete(item)}
+                delayLongPress={300}
+              >
+                <View style={styles.cardMain}>
+                  <View style={styles.cardTextContainer}>
+                    <Text style={styles.cardText}>{item.text}</Text>
+                    {!!item.verse && (
+                      <Text style={styles.cardVerse}>{item.verse}</Text>
+                    )}
+                  </View>
+                  <Image source={{ uri: item.image }} style={styles.cardImage} />
                 </View>
-                <Image source={{ uri: item.image }} style={styles.cardImage} />
-              </View>
-              <View style={styles.cardActions}>
-                <Pressable
-                  style={[
-                    styles.completeButton,
-                    isDone && styles.completeButtonActive,
-                  ]}
-                  onPress={() => toggleCompleted(item.id)}
-                  disabled={isAuto}
-                >
-                  <CheckCircle2
-                    size={18}
-                    color={isDone ? colors.white : colors.primary}
-                  />
-                  <Text
+                <View style={styles.cardActions}>
+                  <Pressable
                     style={[
-                      styles.completeButtonText,
-                      isDone && styles.completeButtonTextActive,
+                      styles.completeButton,
+                      isDone && styles.completeButtonActive,
                     ]}
+                    onPress={() => toggleCompleted(item)}
+                    disabled={isAuto}
                   >
-                    {isAuto
-                      ? "Completed today"
-                      : isDone
-                        ? "Completed"
-                        : "Mark Completed"}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  style={styles.moreButton}
-                  onPress={() => confirmDelete(item)}
-                  hitSlop={8}
-                >
-                  <Trash2 size={20} color={colors.textMuted} />
-                </Pressable>
-              </View>
+                    <CheckCircle2
+                      size={18}
+                      color={isDone ? colors.white : colors.primary}
+                    />
+                    <Text
+                      style={[
+                        styles.completeButtonText,
+                        isDone && styles.completeButtonTextActive,
+                      ]}
+                    >
+                      {isAuto
+                        ? "Completed today"
+                        : isDone
+                          ? "Completed"
+                          : "Mark Completed"}
+                    </Text>
+                  </Pressable>
+                </View>
+              </Pressable>
             </MotiView>
           );
         })}
@@ -319,7 +328,6 @@ const styles = StyleSheet.create({
   },
   cardActions: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
     marginTop: spacing.md,
     paddingTop: spacing.sm,
@@ -344,9 +352,6 @@ const styles = StyleSheet.create({
   },
   completeButtonTextActive: {
     color: colors.white,
-  },
-  moreButton: {
-    padding: spacing.xs,
   },
   stateBox: {
     paddingVertical: spacing["3xl"],

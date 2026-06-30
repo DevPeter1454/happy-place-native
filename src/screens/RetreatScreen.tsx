@@ -20,10 +20,12 @@ import {
   radii,
   shadows,
 } from "../theme";
+import { useTabBarVisibility } from "../context/TabBarContext";
 
 export function RetreatScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { onScroll } = useTabBarVisibility();
 
   return (
     <View style={styles.container}>
@@ -38,6 +40,8 @@ export function RetreatScreen() {
       </View>
 
       <ScrollView
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         contentContainerStyle={[
           styles.scrollContent,
           { paddingBottom: Math.max(insets.bottom, 100) },

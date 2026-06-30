@@ -19,6 +19,7 @@ export interface JournalCardProps {
   imageUrl?: string;
   isFavorite?: boolean;
   onPress?: () => void;
+  onLongPress?: () => void;
   onToggleFavorite?: () => void;
 }
 
@@ -29,12 +30,15 @@ export function JournalCard({
   imageUrl,
   isFavorite,
   onPress,
+  onLongPress,
   onToggleFavorite,
 }: JournalCardProps) {
   return (
     <Pressable
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
       onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={300}
     >
       {imageUrl && (
         <Image

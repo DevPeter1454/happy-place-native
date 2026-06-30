@@ -5,6 +5,7 @@ import {
   deleteDoc,
   getDoc,
   getDocs,
+  setDoc,
   query,
   where,
   orderBy,
@@ -151,4 +152,17 @@ export async function deleteActivity(
   activityId: string
 ): Promise<void> {
   await deleteDoc(doc(db, 'users', uid, 'activities', activityId));
+}
+
+/** Set the user-marked completion flag on an activity. */
+export async function setActivityCompleted(
+  uid: string,
+  activityId: string,
+  completed: boolean
+): Promise<void> {
+  await setDoc(
+    doc(db, 'users', uid, 'activities', activityId),
+    { completed },
+    { merge: true }
+  );
 }

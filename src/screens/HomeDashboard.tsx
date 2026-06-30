@@ -18,9 +18,11 @@ import { TaskCard } from "../components/dashboard/TaskCard";
 import { StatCard } from "../components/dashboard/StatCard";
 import type { RootStackParamList } from "../navigation/types";
 import { useAuth } from "../context/AuthContext";
+import { useTabBarVisibility } from "../context/TabBarContext";
 import { getStats, listActivities } from "../services/activities.service";
 import { listEntries } from "../services/journal.service";
-import type { ActivityType } from "../types/models";
+import { getDailyReading } from "../services/bible.service";
+import type { ActivityType, DailyReading } from "../types/models";
 
 /** Avatar used when the profile has no `photoURL` set. */
 const FALLBACK_AVATAR_URL =
@@ -118,11 +120,27 @@ export function HomeDashboard() {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { profile, user } = useAuth();
+  const { onScroll } = useTabBarVisibility();
   const fullName = profile?.fullName ?? user?.displayName ?? "";
   const firstName = fullName.trim().split(" ")[0] || "Friend";
   const avatarUrl = profile?.photoURL ?? FALLBACK_AVATAR_URL;
 
   const [data, setData] = useState<DashboardData>(EMPTY_DATA);
+  const [reading, setReading] = useState<DailyReading | null>(null);
+
+  // The daily reading is the same for everyone and doesn't need auth, so load
+  // it independently. It's cached, so this is cheap on repeat focuses.
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      getDailyReading()
+        .then((r) => active && setReading(r))
+        .catch(() => active && setReading(null));
+      return () => {
+        active = false;
+      };
+    }, [])
+  );
 
   const loadData = useCallback(async (uid: string) => {
     const todayKey = dateKey(new Date());
@@ -185,7 +203,10 @@ export function HomeDashboard() {
         navigation.navigate("PrayerTracker");
         break;
       case "bible":
-        navigation.navigate("Main", { screen: "Bible" });
+        navigation.navigate("Main", {
+          screen: "Bible",
+          params: reading ? { ref: reading.reference } : undefined,
+        });
         break;
       case "confession":
         navigation.navigate("AddConfession");
@@ -204,6 +225,8 @@ export function HomeDashboard() {
       style={[styles.container, { paddingTop: insets.top }]}
     >
       <ScrollView
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
@@ -238,6 +261,29 @@ export function HomeDashboard() {
           streakDays={data.streakDays}
         />
 
+        {/* Verse of the Day */}
+        {reading ? (
+          <Pressable
+            onPress={() =>
+              navigation.navigate("Main", {
+                screen: "Bible",
+                params: { ref: reading.reference },
+              })
+            }
+            style={({ pressed }) => [
+              styles.votdCard,
+              pressed && styles.votdCardPressed,
+            ]}
+          >
+            <View style={styles.votdHeader}>
+              <BookOpenText size={16} color={colors.primary} />
+              <Text style={styles.votdLabel}>VERSE OF THE DAY</Text>
+            </View>
+            <Text style={styles.votdText}>"{reading.votd.text}"</Text>
+            <Text style={styles.votdRef}>— {reading.votd.reference}</Text>
+          </Pressable>
+        ) : null}
+
         {/* Daily Tasks */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -248,12 +294,16 @@ export function HomeDashboard() {
               const isDone = data.doneToday[task.id];
               const status = isDone ? "done" : "active";
               const iconColor = isDone ? colors.primary : colors.white;
+              const subtitle =
+                task.id === "bible" && reading
+                  ? `Today: ${reading.reference}`
+                  : task.subtitle;
               return (
                 <TaskCard
                   key={task.id}
                   icon={getTaskIcon(task.id, iconColor)}
                   title={task.title}
-                  subtitle={task.subtitle}
+                  subtitle={subtitle}
                   status={status}
                   onStart={() => startTask(task.id)}
                 />
@@ -366,5 +416,44 @@ const styles = StyleSheet.create({
   statsGrid: {
     flexDirection: "row",
     gap: spacing.lg,
+  },
+
+  // Verse of the Day
+  votdCard: {
+    backgroundColor: colors.white,
+    borderRadius: 20,
+    padding: spacing.xl,
+    borderWidth: 1,
+    borderColor: colors.primaryLight05,
+    gap: spacing.sm,
+  },
+  votdCardPressed: {
+    opacity: 0.9,
+  },
+  votdHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  votdLabel: {
+    fontFamily: fontFamilies.sans,
+    fontSize: fontSizes.xs,
+    fontWeight: "700",
+    color: colors.primary,
+    letterSpacing: 1.5,
+    opacity: 0.8,
+  },
+  votdText: {
+    fontFamily: fontFamilies.serif,
+    fontSize: fontSizes.lg,
+    fontStyle: "italic",
+    lineHeight: 28,
+    color: colors.textPrimary,
+  },
+  votdRef: {
+    fontFamily: fontFamilies.sans,
+    fontSize: fontSizes.sm,
+    fontWeight: "600",
+    color: colors.textMuted,
   },
 });

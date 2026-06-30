@@ -1,6 +1,10 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { View, Text, StyleSheet, Animated } from 'react-native';
+import {
+  createBottomTabNavigator,
+  BottomTabBar,
+  type BottomTabBarProps,
+} from '@react-navigation/bottom-tabs';
 import {
   Home,
   BookOpen,
@@ -14,23 +18,50 @@ import { JournalListScreen } from '../screens/JournalListScreen';
 import { BibleReaderScreen } from '../screens/BibleReaderScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { RetreatScreen } from '../screens/RetreatScreen';
+import {
+  TabBarVisibilityProvider,
+  useTabBarVisibility,
+} from '../context/TabBarContext';
 import type { MainTabParamList } from './types';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
+/** Wraps the default tab bar so it can slide off-screen on scroll. */
+function AnimatedTabBar(props: BottomTabBarProps) {
+  const { translateY } = useTabBarVisibility();
+  return (
+    <Animated.View style={[styles.tabBarWrap, { transform: [{ translateY }] }]}>
+      <BottomTabBar {...props} />
+    </Animated.View>
+  );
+}
+
 export function MainTabNavigator() {
   return (
-    <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarStyle: styles.tabBar,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: '#94A3B8',
-        tabBarLabelStyle: styles.tabLabel,
-        tabBarItemStyle: styles.tabItem,
-        animation: 'fade',
-      }}
-    >
+    <TabBarVisibilityProvider>
+      <Tabs />
+    </TabBarVisibilityProvider>
+  );
+}
+
+function Tabs() {
+  // Always reveal the tab bar when a tab gains focus, so it can't get stuck
+  // hidden after navigating away from a scrolled screen.
+  const { reveal } = useTabBarVisibility();
+  return (
+      <Tab.Navigator
+        tabBar={(props) => <AnimatedTabBar {...props} />}
+        screenListeners={{ focus: () => reveal() }}
+        screenOptions={{
+          headerShown: false,
+          tabBarStyle: styles.tabBar,
+          tabBarActiveTintColor: colors.primary,
+          tabBarInactiveTintColor: '#94A3B8',
+          tabBarLabelStyle: styles.tabLabel,
+          tabBarItemStyle: styles.tabItem,
+          animation: 'fade',
+        }}
+      >
       <Tab.Screen
         name="Home"
         component={HomeDashboard}
@@ -59,25 +90,30 @@ export function MainTabNavigator() {
           tabBarIcon: ({ color, size }) => <Leaf size={size} color={color} />,
         }}
       />
-      <Tab.Screen
-        name="Profile"
-        component={ProfileScreen}
-        options={{
-          tabBarIcon: ({ color, size }) => <User size={size} color={color} />,
-        }}
-      />
-    </Tab.Navigator>
+        <Tab.Screen
+          name="Profile"
+          component={ProfileScreen}
+          options={{
+            tabBarIcon: ({ color, size }) => <User size={size} color={color} />,
+          }}
+        />
+      </Tab.Navigator>
   );
 }
 
 const styles = StyleSheet.create({
+  tabBarWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
   tabBar: {
     backgroundColor: 'rgba(255, 255, 255, 0.92)',
     borderTopWidth: 1,
     borderTopColor: colors.primaryLight,
     paddingTop: 8,
     height: 88,
-    position: 'absolute',
     elevation: 0,
   },
   tabLabel: {

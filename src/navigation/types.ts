@@ -30,7 +30,8 @@ export type AuthStackParamList = {
 
 export type MainTabParamList = {
   Home: undefined;
-  Bible: undefined;
+  /** Optional passage to open, e.g. "Psalm 23"; omitted keeps last position. */
+  Bible: { ref?: string } | undefined;
   Journal: undefined;
   Retreat: undefined;
   Profile: undefined;
