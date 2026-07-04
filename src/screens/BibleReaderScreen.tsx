@@ -7,6 +7,10 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -27,6 +31,7 @@ import {
   Bookmark,
   Check,
   Eraser,
+  StickyNote,
   X,
 } from "lucide-react-native";
 import { MotiView } from "moti";
@@ -53,6 +58,7 @@ import {
   listBookmarkedVerses,
   setVersesHighlight,
   setVersesBookmark,
+  setVerseNote,
 } from "../services/bibleAnnotations.service";
 import { addActivity, listActivities } from "../services/activities.service";
 import { HIGHLIGHT_COLORS, HIGHLIGHT_ORDER } from "../constants/highlightColors";
@@ -108,6 +114,8 @@ export function BibleReaderScreen() {
     new Map(),
   );
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [noteVerse, setNoteVerse] = useState<number | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
 
   const [bookPickerOpen, setBookPickerOpen] = useState(false);
   const [translationPickerOpen, setTranslationPickerOpen] = useState(false);
@@ -404,6 +412,27 @@ export function BibleReaderScreen() {
     );
   };
 
+  // Notes are per single verse; open the editor for the one selected verse.
+  const openNoteEditor = () => {
+    if (selected.size !== 1) {
+      showToast("Select one verse to add a note");
+      return;
+    }
+    const v = [...selected][0];
+    setNoteVerse(v);
+    setNoteDraft(annotations.get(v)?.note ?? "");
+  };
+
+  const saveNote = () => {
+    if (noteVerse == null || !user?.uid || !book) return;
+    const v = noteVerse;
+    const text = noteDraft.trim();
+    patchAnnotations([v], { note: text || null });
+    setNoteVerse(null);
+    showToast(text ? "Note saved" : "Note removed");
+    setVerseNote(user.uid, reference, v, text || null).catch(reloadAnnotations);
+  };
+
   const handleMarkRead = async () => {
     if (saving || doneToday || !book) return;
     if (!user?.uid) {
@@ -552,15 +581,32 @@ export function BibleReaderScreen() {
                           fill={colors.primary}
                         />
                       ) : null}
+                      {ann?.note ? (
+                        <StickyNote size={11} color={colors.primaryGold} />
+                      ) : null}
                     </View>
-                    <Text
-                      style={[
-                        styles.verseText,
-                        { fontSize: verseSize, lineHeight: verseLine },
-                      ]}
-                    >
-                      {item.text}
-                    </Text>
+                    <View style={styles.verseBody}>
+                      <Text
+                        style={[
+                          styles.verseText,
+                          { fontSize: verseSize, lineHeight: verseLine },
+                        ]}
+                      >
+                        {item.text}
+                      </Text>
+                      {ann?.note ? (
+                        <Pressable
+                          onPress={() => {
+                            setNoteVerse(item.verse);
+                            setNoteDraft(ann.note ?? "");
+                          }}
+                          style={styles.noteBlock}
+                        >
+                          <StickyNote size={13} color={colors.primaryGold} />
+                          <Text style={styles.noteBlockText}>{ann.note}</Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
                   </Pressable>
                 );
               })}
@@ -670,9 +716,67 @@ export function BibleReaderScreen() {
                 fill={anySelectedBookmarked ? colors.primary : "transparent"}
               />
             </Pressable>
+            <Pressable
+              onPress={openNoteEditor}
+              style={({ pressed }) => [
+                styles.actionBtn,
+                pressed && styles.actionBtnPressed,
+              ]}
+            >
+              <StickyNote size={18} color={colors.primaryGold} />
+            </Pressable>
           </View>
         </View>
       ) : null}
+
+      {/* Note editor */}
+      <Modal
+        visible={noteVerse !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setNoteVerse(null)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={styles.noteModalFlex}
+        >
+          <Pressable
+            style={styles.noteBackdrop}
+            onPress={() => setNoteVerse(null)}
+          >
+            <Pressable style={styles.noteCard} onPress={() => {}}>
+              <View style={styles.noteHeader}>
+                <Text style={styles.noteTitle}>
+                  Note · {book} {chapter}:{noteVerse}
+                </Text>
+                <Pressable onPress={() => setNoteVerse(null)} hitSlop={8}>
+                  <X size={22} color={colors.textMuted} />
+                </Pressable>
+              </View>
+              <TextInput
+                value={noteDraft}
+                onChangeText={setNoteDraft}
+                placeholder="Write a note for this verse…"
+                placeholderTextColor={colors.textPlaceholder}
+                multiline
+                autoFocus
+                style={styles.noteInput}
+              />
+              <Pressable
+                onPress={saveNote}
+                style={({ pressed }) => [
+                  styles.noteSaveBtn,
+                  pressed && styles.readButtonPressed,
+                ]}
+              >
+                <Text style={styles.noteSaveText}>
+                  {noteDraft.trim() ? "Save Note" : "Remove Note"}
+                </Text>
+              </Pressable>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* Modals */}
       <BookChapterPicker
@@ -878,11 +982,81 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 32,
   },
-  verseText: {
+  verseBody: {
     flex: 1,
+  },
+  verseText: {
     fontFamily: fontFamilies.serif,
     color: colors.textPrimary,
     textAlign: "justify",
+  },
+  noteBlock: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    backgroundColor: "rgba(212, 160, 23, 0.08)",
+    borderLeftWidth: 3,
+    borderLeftColor: colors.primaryGold,
+    borderRadius: radii.sm,
+    padding: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  noteBlockText: {
+    flex: 1,
+    fontFamily: fontFamilies.sans,
+    fontSize: fontSizes.sm,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  noteModalFlex: { flex: 1 },
+  noteBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  noteCard: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: radii.xl,
+    borderTopRightRadius: radii.xl,
+    padding: spacing.xl,
+    paddingBottom: spacing["2xl"],
+  },
+  noteHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing.md,
+  },
+  noteTitle: {
+    fontFamily: fontFamilies.serif,
+    fontSize: fontSizes.lg,
+    fontWeight: "700",
+    color: colors.textPrimary,
+  },
+  noteInput: {
+    minHeight: 110,
+    maxHeight: 200,
+    backgroundColor: colors.background,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.primaryLight05,
+    padding: spacing.lg,
+    fontFamily: fontFamilies.serif,
+    fontSize: fontSizes.base,
+    color: colors.textPrimary,
+    textAlignVertical: "top",
+  },
+  noteSaveBtn: {
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.lg,
+    borderRadius: radii.xl,
+    alignItems: "center",
+    marginTop: spacing.lg,
+  },
+  noteSaveText: {
+    fontFamily: fontFamilies.sans,
+    fontSize: fontSizes.base,
+    fontWeight: "700",
+    color: colors.white,
   },
   controlsRow: {
     flexDirection: "row",

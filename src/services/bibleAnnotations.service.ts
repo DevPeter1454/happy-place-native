@@ -5,6 +5,7 @@ import {
   query,
   where,
   writeBatch,
+  setDoc,
   serverTimestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
@@ -68,6 +69,20 @@ export async function setVersesHighlight(
     );
   }
   await batch.commit();
+}
+
+/** Set (or clear, with null) a free-text note on a single verse. */
+export async function setVerseNote(
+  uid: string,
+  reference: string,
+  verse: number,
+  note: string | null
+): Promise<void> {
+  await setDoc(
+    doc(versesCol(uid), verseDocId(reference, verse)),
+    { reference, verse, note, updatedAt: serverTimestamp() },
+    { merge: true }
+  );
 }
 
 /** Set the bookmark flag on one or more verses. */

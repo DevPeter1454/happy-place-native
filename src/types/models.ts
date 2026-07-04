@@ -114,7 +114,50 @@ export interface VerseAnnotation {
   /** Highlight color, or null/absent if not highlighted. */
   highlight?: HighlightColor | null;
   bookmarked?: boolean;
+  /** Free-text note attached to the verse. */
+  note?: string | null;
   updatedAt?: Timestamp;
+}
+
+export type RetreatKind = 'guided' | 'custom';
+
+export type RetreatTaskKey = 'bible' | 'prayer' | 'journal' | 'confession';
+
+/**
+ * The user's active retreat, stored as a singleton at
+ * users/{uid}/retreat/current. Task completion is tracked here explicitly and is
+ * INDEPENDENT of the global streak/activities — logging a normal prayer or Bible
+ * reading does not affect the retreat, and vice versa.
+ */
+export interface Retreat {
+  kind: RetreatKind;
+  /** Guided only: which curriculum from RETREAT_PLANS. */
+  planId?: string;
+  title: string;
+  /** Inclusive start day as a YYYY-MM-DD key. */
+  startDate: string;
+  totalDays: number;
+  /** Explicit per-day task completion, keyed by YYYY-MM-DD. */
+  progress?: Record<string, Partial<Record<RetreatTaskKey, boolean>>>;
+  /** Chosen Bible passage per day (YYYY-MM-DD → e.g. "John 3"). */
+  scriptures?: Record<string, string>;
+  createdAt: Timestamp;
+  completedAt?: Timestamp | null;
+}
+
+/** Derived (not stored) completion for one day of a retreat. */
+export interface RetreatDayProgress {
+  dayIndex: number; // 1-based
+  dateKey: string;
+  isToday: boolean;
+  isPast: boolean;
+  isFuture: boolean;
+  tasks: {
+    bible: boolean;
+    prayer: boolean;
+    confession: boolean;
+    journal: boolean;
+  };
 }
 
 /** Single summary document per user, updated as activities are logged. */

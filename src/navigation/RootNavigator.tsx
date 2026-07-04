@@ -12,6 +12,7 @@ import type { RootStackParamList } from "./types";
 import { RetreatDashboardScreen } from "../screens/RetreatDashboardScreen";
 import { ConfessionListScreen } from "../screens/ConfessionListScreen";
 import { AddConfessionScreen } from "../screens/AddConfessionScreen";
+import { PrayerListScreen } from "../screens/PrayerListScreen";
 import { useAuth } from "../context/AuthContext";
 import { colors } from "../theme";
 
@@ -48,6 +49,7 @@ export function RootNavigator() {
           <Stack.Screen name="RetreatDashboard" component={RetreatDashboardScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="ConfessionList" component={ConfessionListScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="AddConfession" component={AddConfessionScreen} options={{ presentation: 'modal' }} />
+          <Stack.Screen name="PrayerList" component={PrayerListScreen} options={{ animation: 'slide_from_right' }} />
         </>
       ) : (
         // Signed out → intro + auth flow.

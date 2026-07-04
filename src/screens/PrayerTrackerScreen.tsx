@@ -20,7 +20,8 @@ import {
   ArrowLeft,
   Settings,
   BellRing,
-  CheckCircle2,
+  Plus,
+  ScrollText,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react-native";
@@ -34,16 +35,13 @@ import {
 } from "../theme";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import {
-  listActivities,
-  addActivity,
-  getStats,
-} from "../services/activities.service";
+import { listActivities, getStats } from "../services/activities.service";
 import { updateProfile } from "../services/user.service";
 import {
   ensurePermissions,
   scheduleDailyPrayerReminder,
 } from "../services/notifications.service";
+import { AddPrayerModal } from "../components/prayer/AddPrayerModal";
 import type { SpiritualActivity, UserStats } from "../types/models";
 import type { RootStackScreenProps } from "../navigation/types";
 
@@ -224,11 +222,19 @@ export function PrayerTrackerScreen({
   const [activities, setActivities] = useState<SpiritualActivity[]>([]);
   const [stats, setStats] = useState<UserStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  // Tracks an in-flight optimistic "logged today" before the reload lands.
-  const [optimisticToday, setOptimisticToday] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerValue, setPickerValue] = useState(new Date());
+
+  const reloadPrayerData = useCallback(() => {
+    if (!user?.uid) return;
+    Promise.all([listActivities(user.uid, "prayer"), getStats(user.uid)])
+      .then(([acts, s]) => {
+        setActivities(acts);
+        setStats(s);
+      })
+      .catch(() => {});
+  }, [user?.uid]);
 
   const reminderTime = profile?.preferences?.reminderTime ?? DEFAULT_REMINDER;
 
@@ -301,21 +307,6 @@ export function PrayerTrackerScreen({
     );
   };
 
-  // Whether the user has already logged a prayer for the actual current day —
-  // independent of which month is being viewed.
-  const doneToday = useMemo(() => {
-    if (optimisticToday) return true;
-    return activities.some((a) => {
-      const d = a.date?.toDate?.();
-      return (
-        d &&
-        d.getFullYear() === now.getFullYear() &&
-        d.getMonth() === now.getMonth() &&
-        d.getDate() === now.getDate()
-      );
-    });
-  }, [activities, optimisticToday, now]);
-
   // Day-of-month numbers with a logged prayer in the viewed month.
   const completedDays = useMemo(() => {
     const set = new Set<number>();
@@ -325,9 +316,8 @@ export function PrayerTrackerScreen({
         set.add(d.getDate());
       }
     }
-    if (optimisticToday && isCurrentMonth) set.add(today);
     return set;
-  }, [activities, view, optimisticToday, isCurrentMonth, today]);
+  }, [activities, view]);
 
   const daysCompleted = completedDays.size;
   // Days that should have had a prayer but didn't: elapsed days of the current
@@ -359,31 +349,6 @@ export function PrayerTrackerScreen({
     () => Array.from({ length: daysInMonth }, (_, i) => i + 1),
     [daysInMonth],
   );
-
-  const handleMark = async () => {
-    if (saving || !user?.uid) return;
-    if (doneToday) {
-      showToast("Already logged today");
-      return;
-    }
-    setSaving(true);
-    setOptimisticToday(true);
-    showToast("Prayer logged 🙏");
-    try {
-      await addActivity(user.uid, { type: "prayer" });
-      const [acts, s] = await Promise.all([
-        listActivities(user.uid, "prayer"),
-        getStats(user.uid),
-      ]);
-      setActivities(acts);
-      setStats(s);
-    } catch {
-      setOptimisticToday(false);
-      Alert.alert("Couldn't save", "Your prayer wasn't logged. Please try again.");
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const openPicker = () => {
     const [h, m] = reminderTime.split(":").map((p) => parseInt(p, 10));
@@ -484,24 +449,28 @@ export function PrayerTrackerScreen({
             </Pressable>
           </View>
 
-          {/* Mark Prayer Completed Button */}
+          {/* Add Prayer */}
           <Pressable
-            onPress={handleMark}
-            disabled={doneToday || saving}
+            onPress={() => setAddOpen(true)}
             style={({ pressed }) => [
               styles.markButton,
               pressed && styles.markButtonPressed,
-              (doneToday || saving) && styles.markButtonDisabled,
             ]}
           >
-            <CheckCircle2 size={22} color={colors.white} />
-            <Text style={styles.markButtonText}>
-              {doneToday
-                ? "Completed Today"
-                : saving
-                  ? "Logging…"
-                  : "Mark Prayer Completed"}
-            </Text>
+            <Plus size={22} color={colors.white} />
+            <Text style={styles.markButtonText}>Add Prayer</Text>
+          </Pressable>
+
+          {/* My Prayers link */}
+          <Pressable
+            onPress={() => navigation.navigate("PrayerList")}
+            style={({ pressed }) => [
+              styles.myPrayersBtn,
+              pressed && styles.editBtnPressed,
+            ]}
+          >
+            <ScrollText size={18} color={colors.primary} />
+            <Text style={styles.myPrayersText}>My Prayers</Text>
           </Pressable>
 
           {/* Monthly Stats */}
@@ -649,6 +618,12 @@ export function PrayerTrackerScreen({
           </Pressable>
         </Modal>
       ) : null}
+
+      <AddPrayerModal
+        visible={addOpen}
+        onClose={() => setAddOpen(false)}
+        onSaved={reloadPrayerData}
+      />
     </MotiView>
   );
 }
@@ -739,6 +714,22 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primaryLight30,
   },
   editBtnText: {
+    fontFamily: fontFamilies.sans,
+    fontSize: fontSizes.sm,
+    fontWeight: "600",
+    color: colors.primary,
+  },
+
+  // My Prayers link
+  myPrayersBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    marginTop: -spacing.md,
+  },
+  myPrayersText: {
     fontFamily: fontFamilies.sans,
     fontSize: fontSizes.sm,
     fontWeight: "600",

@@ -21,6 +21,7 @@ export type RootStackParamList = {
   RetreatDashboard: undefined;
   ConfessionList: undefined;
   AddConfession: undefined;
+  PrayerList: undefined;
 };
 
 export type AuthStackParamList = {
