@@ -13,6 +13,14 @@ import { RetreatDashboardScreen } from "../screens/RetreatDashboardScreen";
 import { ConfessionListScreen } from "../screens/ConfessionListScreen";
 import { AddConfessionScreen } from "../screens/AddConfessionScreen";
 import { PrayerListScreen } from "../screens/PrayerListScreen";
+import { AddPrayerScreen } from "../screens/AddPrayerScreen";
+import { VerseOfDayScreen } from "../screens/VerseOfDayScreen";
+import { BibleTrackerScreen } from "../screens/BibleTrackerScreen";
+import { ConfessionTrackerScreen } from "../screens/ConfessionTrackerScreen";
+import { JournalTrackerScreen } from "../screens/JournalTrackerScreen";
+import { EditProfileScreen } from "../screens/EditProfileScreen";
+import { PrivacySecurityScreen } from "../screens/PrivacySecurityScreen";
+import { SupportCenterScreen } from "../screens/SupportCenterScreen";
 import { useAuth } from "../context/AuthContext";
 import { colors } from "../theme";
 
@@ -50,6 +58,14 @@ export function RootNavigator() {
           <Stack.Screen name="ConfessionList" component={ConfessionListScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="AddConfession" component={AddConfessionScreen} options={{ presentation: 'modal' }} />
           <Stack.Screen name="PrayerList" component={PrayerListScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="AddPrayer" component={AddPrayerScreen} options={{ presentation: 'modal' }} />
+          <Stack.Screen name="BibleTracker" component={BibleTrackerScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="ConfessionTracker" component={ConfessionTrackerScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="JournalTracker" component={JournalTrackerScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="VerseOfDay" component={VerseOfDayScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="PrivacySecurity" component={PrivacySecurityScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="SupportCenter" component={SupportCenterScreen} options={{ animation: 'slide_from_right' }} />
         </>
       ) : (
         // Signed out → intro + auth flow.

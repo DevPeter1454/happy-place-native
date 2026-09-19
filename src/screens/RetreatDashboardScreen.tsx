@@ -609,7 +609,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   progressTextContainer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: "center",
     alignItems: "center",
   },

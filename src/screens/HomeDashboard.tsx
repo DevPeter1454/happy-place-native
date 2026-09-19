@@ -4,18 +4,25 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { MotiView } from "moti";
-import { Image } from "expo-image";
 import {
   Heart,
+  HandHeart,
+  Quote,
   BookOpen,
   PenLine,
   Calendar,
   BookOpenText,
+  ChevronRight,
+  Plus,
 } from "lucide-react-native";
-import { colors, fontFamilies, fontSizes, spacing } from "../theme";
+import { colors, fontFamilies, fontSizes, spacing, radii } from "../theme";
 import { ProgressCard } from "../components/dashboard/ProgressCard";
 import { TaskCard } from "../components/dashboard/TaskCard";
 import { StatCard } from "../components/dashboard/StatCard";
+import { Avatar } from "../components/profile/Avatar";
+import { cacheKeys } from "../services/cache";
+import { useCachedData } from "../hooks/useCachedData";
+import { parseConfession, type ParsedConfession } from "../utils/confessions";
 import type { RootStackParamList } from "../navigation/types";
 import { useAuth } from "../context/AuthContext";
 import { useTabBarVisibility } from "../context/TabBarContext";
@@ -23,10 +30,6 @@ import { getStats, listActivities } from "../services/activities.service";
 import { listEntries } from "../services/journal.service";
 import { getDailyReading } from "../services/bible.service";
 import type { ActivityType, DailyReading } from "../types/models";
-
-/** Avatar used when the profile has no `photoURL` set. */
-const FALLBACK_AVATAR_URL =
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuA37M7Idq13PCJDUNLNDCGEiAfVLUCGLlYLiXaAYfDWjUNnKkWp-VoRHPzgFyM7SnyJpudymw5AjDT1SpTyF1nSkSvR8kwUhFffCd5rRm-M1mcHzxJ9w75HHlHGqsnz7kunJDfCprKVaM_1gtPN_LZQa3TySzZednpBLWKAG2fWln15kAr4uVQ0Nemmj-7qhtXwWB4ugdVozw_fc_Fi3bOp5NRpquYqdkulApO4rGvFGVpdUUpUpnPqULHr3c6MkP_uP5lUO5Szk35f";
 
 /** Identifiers for the four daily disciplines shown on the dashboard. */
 type TaskId = "prayer" | "bible" | "confession" | "journal";
@@ -84,15 +87,16 @@ function dateKey(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+/** One distinct icon per discipline — prayer and confession shared Heart. */
 function getTaskIcon(id: string, iconColor: string) {
   const size = 24;
   switch (id) {
     case "prayer":
-      return <Heart size={size} color={iconColor} />;
+      return <HandHeart size={size} color={iconColor} />;
     case "bible":
       return <BookOpen size={size} color={iconColor} />;
     case "confession":
-      return <Heart size={size} color={iconColor} />;
+      return <Quote size={size} color={iconColor} />;
     case "journal":
       return <PenLine size={size} color={iconColor} />;
     default:
@@ -100,20 +104,42 @@ function getTaskIcon(id: string, iconColor: string) {
   }
 }
 
-/** Which TaskCard ids are completed today, plus the monthly totals + streak. */
+/**
+ * Which TaskCard ids are completed today, this month's figures, and the streak.
+ *
+ * The monthly figures are counted from the fetched activities/entries rather
+ * than read from `stats.totalsByType` — those are lifetime counters that never
+ * reset, so using them under a "Monthly Summary" heading reported the wrong
+ * number. Each figure matches the wording of its label: prayer counts distinct
+ * days, the rest count entries.
+ */
 interface DashboardData {
   doneToday: Record<TaskId, boolean>;
-  prayerTotal: number;
-  bibleTotal: number;
+  monthly: {
+    prayerDays: number;
+    bibleReadings: number;
+    confessions: number;
+    reflections: number;
+  };
   streakDays: number;
+  /** Newest confession(s), for the dashboard preview. */
+  recentConfessions: ParsedConfession[];
 }
 
 const EMPTY_DATA: DashboardData = {
   doneToday: { prayer: false, bible: false, confession: false, journal: false },
-  prayerTotal: 0,
-  bibleTotal: 0,
+  monthly: {
+    prayerDays: 0,
+    bibleReadings: 0,
+    confessions: 0,
+    reflections: 0,
+  },
   streakDays: 0,
+  recentConfessions: [],
 };
+
+/** How many confessions the dashboard previews before "See all". */
+const CONFESSION_PREVIEW = 1;
 
 export function HomeDashboard() {
   const insets = useSafeAreaInsets();
@@ -123,9 +149,10 @@ export function HomeDashboard() {
   const { onScroll } = useTabBarVisibility();
   const fullName = profile?.fullName ?? user?.displayName ?? "";
   const firstName = fullName.trim().split(" ")[0] || "Friend";
-  const avatarUrl = profile?.photoURL ?? FALLBACK_AVATAR_URL;
+  // Same precedence as the Profile screen, so the two never disagree; with no
+  // picture <Avatar> falls back to the user's initials.
+  const avatarUrl = profile?.photoURL ?? user?.photoURL ?? null;
 
-  const [data, setData] = useState<DashboardData>(EMPTY_DATA);
   const [reading, setReading] = useState<DailyReading | null>(null);
 
   // The daily reading is the same for everyone and doesn't need auth, so load
@@ -142,12 +169,13 @@ export function HomeDashboard() {
     }, [])
   );
 
-  const loadData = useCallback(async (uid: string) => {
+  const uid = user?.uid;
+  const loadData = useCallback(async (): Promise<DashboardData> => {
     const todayKey = dateKey(new Date());
     const [activities, entries, stats] = await Promise.all([
-      listActivities(uid),
-      listEntries(uid),
-      getStats(uid),
+      listActivities(uid!),
+      listEntries(uid!),
+      getStats(uid!),
     ]);
 
     const doneToday: Record<TaskId, boolean> = {
@@ -166,38 +194,65 @@ export function HomeDashboard() {
       (e) => e.createdAt && dateKey(e.createdAt.toDate()) === todayKey
     );
 
-    setData({
-      doneToday,
-      prayerTotal: stats?.totalsByType.prayer ?? 0,
-      bibleTotal: stats?.totalsByType.bible_reading ?? 0,
-      streakDays: stats?.currentStreak ?? 0,
-    });
-  }, []);
+    // This month's figures, counted from the same fetched data — no extra reads.
+    const now = new Date();
+    const thisMonth = (d: Date) =>
+      d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
 
-  // Reload whenever the screen regains focus, so newly-logged disciplines
-  // are reflected when the user navigates back to the dashboard.
-  useFocusEffect(
-    useCallback(() => {
-      if (!user?.uid) {
-        setData(EMPTY_DATA);
-        return;
-      }
-      let active = true;
-      loadData(user.uid).catch(() => {
-        if (active) setData(EMPTY_DATA);
-      });
-      return () => {
-        active = false;
-      };
-    }, [user?.uid, loadData])
+    const prayerDays = new Set<string>();
+    let bibleReadings = 0;
+    let confessions = 0;
+    for (const a of activities) {
+      const d = a.date?.toDate?.();
+      if (!d || !thisMonth(d)) continue;
+      if (a.type === "prayer") prayerDays.add(dateKey(d));
+      else if (a.type === "bible_reading") bibleReadings += 1;
+      else if (a.type === "confession") confessions += 1;
+    }
+    const reflections = entries.filter(
+      (e) => e.createdAt && thisMonth(e.createdAt.toDate())
+    ).length;
+
+    // listActivities(uid) already returns every type newest-first, so the
+    // confession preview costs no extra query.
+    const recentConfessions = activities
+      .filter((a) => a.type === "confession")
+      .slice(0, CONFESSION_PREVIEW)
+      .map(parseConfession);
+
+    return {
+      doneToday,
+      monthly: {
+        prayerDays: prayerDays.size,
+        bibleReadings,
+        confessions,
+        reflections,
+      },
+      streakDays: stats?.currentStreak ?? 0,
+      recentConfessions,
+    };
+  }, [uid]);
+
+  const { data: cached } = useCachedData(
+    uid ? cacheKeys.dashboard(uid) : null,
+    loadData,
   );
+  const data = cached ?? EMPTY_DATA;
+
 
   const completed = TASKS.filter((t) => data.doneToday[t.id]).length;
   const total = TASKS.length;
   const percentage = Math.round((completed / total) * 100);
 
-  /** Route a discipline's "Start" button to the screen that logs it. */
-  const startTask = (id: TaskId) => {
+  /**
+   * Where tapping a discipline goes.
+   *
+   * Once it's done for the day the destination changes from "log it" to "see
+   * it": opening a blank composer for a task you've already completed is the
+   * wrong answer. Prayer and Bible already land on screens that read well either
+   * way, so only confession and journal need the distinction.
+   */
+  const openTask = (id: TaskId, isDone: boolean) => {
     switch (id) {
       case "prayer":
         navigation.navigate("PrayerTracker");
@@ -209,10 +264,12 @@ export function HomeDashboard() {
         });
         break;
       case "confession":
-        navigation.navigate("AddConfession");
+        if (isDone) navigation.navigate("ConfessionList");
+        else navigation.navigate("AddConfession");
         break;
       case "journal":
-        navigation.navigate("NewJournalEntry");
+        if (isDone) navigation.navigate("Main", { screen: "Journal" });
+        else navigation.navigate("NewJournalEntry");
         break;
     }
   };
@@ -237,11 +294,9 @@ export function HomeDashboard() {
               onPress={() => navigation.navigate("Main", { screen: "Profile" })}
               style={styles.avatarContainer}
             >
-              <Image
-                source={{ uri: avatarUrl }}
-                style={styles.avatar}
-                contentFit="cover"
-              />
+              <View style={styles.avatarRing}>
+                <Avatar uri={avatarUrl} name={fullName} size={44} />
+              </View>
               <View style={styles.onlineDot} />
             </Pressable>
             <View>
@@ -264,12 +319,7 @@ export function HomeDashboard() {
         {/* Verse of the Day */}
         {reading ? (
           <Pressable
-            onPress={() =>
-              navigation.navigate("Main", {
-                screen: "Bible",
-                params: { ref: reading.reference },
-              })
-            }
+            onPress={() => navigation.navigate("VerseOfDay")}
             style={({ pressed }) => [
               styles.votdCard,
               pressed && styles.votdCardPressed,
@@ -280,7 +330,10 @@ export function HomeDashboard() {
               <Text style={styles.votdLabel}>VERSE OF THE DAY</Text>
             </View>
             <Text style={styles.votdText}>"{reading.votd.text}"</Text>
-            <Text style={styles.votdRef}>— {reading.votd.reference}</Text>
+            <View style={styles.votdFooter}>
+              <Text style={styles.votdRef}>— {reading.votd.reference}</Text>
+              <ChevronRight size={16} color={colors.primary} />
+            </View>
           </Pressable>
         ) : null}
 
@@ -305,11 +358,68 @@ export function HomeDashboard() {
                   title={task.title}
                   subtitle={subtitle}
                   status={status}
-                  onStart={() => startTask(task.id)}
+                  onStart={() => openTask(task.id, isDone)}
                 />
               );
             })}
           </View>
+        </View>
+
+        {/* Confessions — readable here so they aren't buried inside Journal */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Confessions</Text>
+            <Pressable
+              onPress={() => navigation.navigate("ConfessionList")}
+              hitSlop={8}
+              style={({ pressed }) => [styles.seeAll, pressed && styles.dim]}
+            >
+              <Text style={styles.seeAllText}>See all</Text>
+              <ChevronRight size={14} color={colors.primary} />
+            </Pressable>
+          </View>
+
+          {data.recentConfessions.length ? (
+            <View style={styles.confessionList}>
+              {data.recentConfessions.map((c) => (
+                <Pressable
+                  key={c.id}
+                  onPress={() =>
+                    navigation.navigate("ConfessionList", {
+                      highlightId: c.id,
+                    })
+                  }
+                  style={({ pressed }) => [
+                    styles.confessionCard,
+                    pressed && styles.dim,
+                  ]}
+                >
+                  <Text style={styles.confessionText} numberOfLines={3}>
+                    "{c.text}"
+                  </Text>
+                  {c.verse ? (
+                    <Text style={styles.confessionVerse}>— {c.verse}</Text>
+                  ) : null}
+                </Pressable>
+              ))}
+            </View>
+          ) : (
+            <Pressable
+              onPress={() => navigation.navigate("AddConfession")}
+              style={({ pressed }) => [
+                styles.confessionEmpty,
+                pressed && styles.dim,
+              ]}
+            >
+              <Text style={styles.confessionEmptyText}>
+                Speak life over your day — write your first confession.
+              </Text>
+              <View style={styles.confessionEmptyCta}>
+                <Plus size={16} color={colors.primary} />
+                <Text style={styles.seeAllText}>Add a confession</Text>
+              </View>
+            </Pressable>
+          )}
         </View>
 
         {/* Monthly Summary */}
@@ -318,15 +428,29 @@ export function HomeDashboard() {
           <View style={styles.statsGrid}>
             <StatCard
               icon={<Calendar size={22} color={colors.primary} />}
-              value={data.prayerTotal}
+              value={data.monthly.prayerDays}
               label="Prayer Days"
               onPress={() => navigation.navigate("PrayerTracker")}
             />
             <StatCard
               icon={<BookOpenText size={22} color={colors.primary} />}
-              value={data.bibleTotal}
+              value={data.monthly.bibleReadings}
               label="Bible Readings"
-              onPress={() => navigation.navigate("Main", { screen: "Bible" })}
+              onPress={() => navigation.navigate("BibleTracker")}
+            />
+          </View>
+          <View style={styles.statsGrid}>
+            <StatCard
+              icon={<Quote size={22} color={colors.primary} />}
+              value={data.monthly.confessions}
+              label="Confessions"
+              onPress={() => navigation.navigate("ConfessionTracker")}
+            />
+            <StatCard
+              icon={<PenLine size={22} color={colors.primary} />}
+              value={data.monthly.reflections}
+              label="Reflections"
+              onPress={() => navigation.navigate("JournalTracker")}
             />
           </View>
         </View>
@@ -361,12 +485,15 @@ const styles = StyleSheet.create({
   avatarContainer: {
     position: "relative",
   },
-  avatar: {
+  avatarRing: {
     width: 48,
     height: 48,
     borderRadius: 24,
     borderWidth: 2,
     borderColor: colors.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
   },
   onlineDot: {
     position: "absolute",
@@ -418,6 +545,68 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
   },
 
+  // Confessions
+  seeAll: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  seeAllText: {
+    fontFamily: fontFamilies.sans,
+    fontSize: fontSizes.sm,
+    fontWeight: "700",
+    color: colors.primary,
+  },
+  dim: {
+    opacity: 0.6,
+  },
+  confessionList: {
+    gap: spacing.md,
+  },
+  confessionCard: {
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.primaryLight05,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.primaryGold,
+    padding: spacing.lg,
+    gap: spacing.xs,
+  },
+  confessionText: {
+    fontFamily: fontFamilies.serifItalic,
+    fontSize: fontSizes.base,
+    lineHeight: 24,
+    color: colors.textPrimary,
+  },
+  confessionVerse: {
+    fontFamily: fontFamilies.sans,
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.textMuted,
+  },
+  confessionEmpty: {
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.primaryLight05,
+    borderStyle: "dashed",
+    padding: spacing.lg,
+    alignItems: "center",
+    gap: spacing.md,
+  },
+  confessionEmptyText: {
+    fontFamily: fontFamilies.sans,
+    fontSize: fontSizes.sm,
+    color: colors.textMuted,
+    textAlign: "center",
+  },
+  confessionEmptyCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+
   // Verse of the Day
   votdCard: {
     backgroundColor: colors.white,
@@ -449,6 +638,11 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     lineHeight: 28,
     color: colors.textPrimary,
+  },
+  votdFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   votdRef: {
     fontFamily: fontFamilies.sans,

@@ -1,15 +1,20 @@
 import {
   createUserWithEmailAndPassword,
+  deleteUser,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
   signInWithEmailAndPassword,
   signOut,
   sendPasswordResetEmail,
+  updatePassword,
   updateProfile as updateAuthProfile,
   type User,
   type UserCredential,
 } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import { createProfile } from './user.service';
+import { createProfile, deleteProfile } from './user.service';
+import { deleteAvatar } from './storage.service';
 import type { ActivityType } from '../types/models';
 
 const INITIAL_TOTALS: Record<ActivityType, number> = {
@@ -78,6 +83,70 @@ export async function resetPassword(email: string): Promise<void> {
 }
 
 /**
+ * Whether the account can change its password in-app. Accounts created through
+ * a federated provider (Google, Apple, …) have no password to rotate.
+ */
+export function hasPasswordProvider(user: User | null): boolean {
+  return !!user?.providerData.some((p) => p.providerId === 'password');
+}
+
+/**
+ * Change the signed-in user's password.
+ *
+ * Firebase requires a recent login for this, so the current password is used to
+ * re-authenticate first — which also means a wrong current password fails here
+ * rather than silently succeeding.
+ */
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string
+): Promise<void> {
+  const current = auth.currentUser;
+  if (!current?.email) {
+    throw new Error('No signed-in account with a password to change.');
+  }
+  await reauthenticateWithCredential(
+    current,
+    EmailAuthProvider.credential(current.email, currentPassword)
+  );
+  await updatePassword(current, newPassword);
+}
+
+/**
+ * Permanently delete the signed-in account, then its avatar and profile
+ * document. Deleting the auth user flips onAuthStateChanged, which returns the
+ * app to the auth flow on its own.
+ *
+ * The cleanup runs only when we were able to re-authenticate first: without a
+ * fresh credential Firebase can reject the deletion with
+ * `auth/requires-recent-login`, and wiping the profile ahead of a rejected
+ * deletion would destroy a live account's data.
+ *
+ * Note: nested subcollections (activities, journalEntries, …) cannot be deleted
+ * from the client in one call, so they are left behind either way. Reap them
+ * with a Cloud Function or the "Delete User Data" Firebase extension.
+ */
+export async function deleteAccount(currentPassword?: string): Promise<void> {
+  const current = auth.currentUser;
+  const email = current?.email;
+  if (!current) throw new Error('No signed-in account to delete.');
+
+  const reauthenticated = Boolean(currentPassword && email);
+  if (currentPassword && email) {
+    await reauthenticateWithCredential(
+      current,
+      EmailAuthProvider.credential(email, currentPassword)
+    );
+  }
+
+  if (reauthenticated) {
+    // Best-effort — a failure here must not block the deletion itself.
+    await Promise.allSettled([deleteAvatar(current.uid), deleteProfile(current.uid)]);
+  }
+  await deleteUser(current);
+}
+
+/**
  * Translate a Firebase auth error code into a short, user-facing message.
  * Accepts the raw error so callers can `catch (e) { setError(mapAuthError(e)) }`.
  */
@@ -98,6 +167,10 @@ export function mapAuthError(error: unknown): string {
     case 'auth/wrong-password':
     case 'auth/user-not-found':
       return 'Incorrect email or password.';
+    case 'auth/missing-password':
+      return 'Please enter your password.';
+    case 'auth/requires-recent-login':
+      return 'For your security, sign in again before making this change.';
     case 'auth/too-many-requests':
       return 'Too many attempts. Please try again later.';
     case 'auth/network-request-failed':

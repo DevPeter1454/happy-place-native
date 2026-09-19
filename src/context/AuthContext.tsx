@@ -15,6 +15,7 @@ import {
   resetPassword as resetPasswordService,
 } from '../services/auth.service';
 import { getProfile } from '../services/user.service';
+import { invalidateCache } from '../services/cache';
 import type { UserProfile } from '../types/models';
 
 interface AuthContextValue {
@@ -54,6 +55,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await loadProfile(nextUser.uid);
       } else {
         setProfile(null);
+        // Drop every cached query so the next signed-in user starts clean.
+        invalidateCache();
       }
       setInitializing(false);
     });

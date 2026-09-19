@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -10,9 +10,9 @@ import {
   Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import { MotiView } from "moti";
-import { Menu, Search, Plus, X } from "lucide-react-native";
+import { Quote, Search, Plus, X } from "lucide-react-native";
 import { colors, fontFamilies, fontSizes, spacing, radii, shadows } from "../theme";
 import { JournalCard } from "../components/journal/JournalCard";
 import type { MainTabScreenProps } from "../navigation/types";
@@ -20,16 +20,15 @@ import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { useTabBarVisibility } from "../context/TabBarContext";
 import { listEntries, setFavorite, deleteEntry } from "../services/journal.service";
+import { cacheKeys } from "../services/cache";
+import { useCachedData } from "../hooks/useCachedData";
+import { entryDate, journalDetailParams } from "../utils/journal";
 import type { JournalEntry } from "../types/models";
 import { imageForEntry } from "../constants/moods";
 
 const TABS = ["All Entries", "Favorites", "Monthly"];
 
 /** Firestore Timestamp → JS Date, tolerating an unresolved server timestamp. */
-function entryDate(entry: JournalEntry): Date {
-  return entry.createdAt ? entry.createdAt.toDate() : new Date();
-}
-
 export function JournalListScreen(_props: MainTabScreenProps<"Journal">) {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
@@ -37,54 +36,32 @@ export function JournalListScreen(_props: MainTabScreenProps<"Journal">) {
   const { showToast } = useToast();
   const { onScroll } = useTabBarVisibility();
   const [activeTab, setActiveTab] = useState("All Entries");
-  const [entries, setEntries] = useState<JournalEntry[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
 
   const openEntry = (entry: JournalEntry) => {
-    navigation.navigate("JournalEntryDetail", {
-      entryId: entry.id,
-      title: entry.title,
-      body: entry.body,
-      mood: entry.mood,
-      createdAt: entryDate(entry).getTime(),
-      isFavorite: entry.isFavorite,
-    });
+    navigation.navigate("JournalEntryDetail", journalDetailParams(entry));
   };
 
-  // Reload whenever the screen regains focus, so a newly-saved reflection
-  // appears without needing a manual refresh.
-  useFocusEffect(
-    useCallback(() => {
-      if (!user?.uid) {
-        setEntries([]);
-        setLoading(false);
-        return;
-      }
-      let active = true;
-      setLoading(true);
-      listEntries(user.uid)
-        .then((result) => active && setEntries(result))
-        .catch(() => active && setEntries([]))
-        .finally(() => active && setLoading(false));
-      return () => {
-        active = false;
-      };
-    }, [user?.uid])
+  const uid = user?.uid;
+  const { data, loading, refresh, mutate } = useCachedData(
+    uid ? cacheKeys.journal(uid) : null,
+    () => listEntries(uid!),
   );
+
+  const entries = data ?? [];
 
   const toggleFavorite = (entry: JournalEntry) => {
     if (!user?.uid) return;
     const next = !entry.isFavorite;
     // Optimistic update; revert if the write fails.
-    setEntries((prev) =>
-      prev.map((e) => (e.id === entry.id ? { ...e, isFavorite: next } : e))
+    mutate((prev) =>
+      (prev ?? []).map((e) => (e.id === entry.id ? { ...e, isFavorite: next } : e))
     );
     showToast(next ? "Added to favorites" : "Removed from favorites");
     setFavorite(user.uid, entry.id, next).catch(() => {
-      setEntries((prev) =>
-        prev.map((e) => (e.id === entry.id ? { ...e, isFavorite: !next } : e))
+      mutate((prev) =>
+        (prev ?? []).map((e) => (e.id === entry.id ? { ...e, isFavorite: !next } : e))
       );
     });
   };
@@ -92,11 +69,9 @@ export function JournalListScreen(_props: MainTabScreenProps<"Journal">) {
   const removeEntry = (entry: JournalEntry) => {
     if (!user?.uid) return;
     // Optimistic removal; reload to restore if the delete fails.
-    setEntries((prev) => prev.filter((e) => e.id !== entry.id));
+    mutate((prev) => (prev ?? []).filter((e) => e.id !== entry.id));
     showToast("Reflection deleted");
-    deleteEntry(user.uid, entry.id).catch(() => {
-      if (user.uid) listEntries(user.uid).then(setEntries);
-    });
+    deleteEntry(user.uid, entry.id).catch(refresh);
   };
 
   // Long-press a card → action sheet (YouVersion-style), keeping the card clean.
@@ -143,8 +118,15 @@ export function JournalListScreen(_props: MainTabScreenProps<"Journal">) {
     <View style={styles.container}>
       <View style={[styles.headerContainer, { paddingTop: Math.max(insets.top, spacing.lg) }]}>
         <View style={styles.headerRow}>
-          <Pressable style={styles.iconButton} onPress={() => navigation.navigate("ConfessionList" as never)}>
-            <Menu size={24} color={colors.primary} />
+          {/* Shortcut to confessions. A hamburger read as "menu" and hid what
+              this actually does; the quote mark matches the affirmations it opens. */}
+          <Pressable
+            style={styles.iconButton}
+            onPress={() => navigation.navigate("ConfessionList")}
+            accessibilityRole="button"
+            accessibilityLabel="Confessions"
+          >
+            <Quote size={22} color={colors.primary} />
           </Pressable>
           <Text style={styles.headerTitle}>My Journal</Text>
           <Pressable

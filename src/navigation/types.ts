@@ -19,9 +19,19 @@ export type RootStackParamList = {
     isFavorite?: boolean;
   };
   RetreatDashboard: undefined;
-  ConfessionList: undefined;
+  /** Optional confession to scroll to and briefly highlight on open. */
+  ConfessionList: { highlightId?: string } | undefined;
   AddConfession: undefined;
   PrayerList: undefined;
+  AddPrayer: undefined;
+  /** Which day's verse to show as "YYYY-MM-DD"; omitted means today. */
+  VerseOfDay: { date?: string } | undefined;
+  BibleTracker: undefined;
+  ConfessionTracker: undefined;
+  JournalTracker: undefined;
+  EditProfile: undefined;
+  PrivacySecurity: undefined;
+  SupportCenter: undefined;
 };
 
 export type AuthStackParamList = {

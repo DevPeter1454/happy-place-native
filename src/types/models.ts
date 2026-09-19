@@ -14,9 +14,12 @@ import type { Timestamp } from 'firebase/firestore';
  */
 
 export interface UserPreferences {
+  /** Master switch for the scheduled daily prayer reminder. */
   notifications: boolean;
   /** Daily prayer reminder time as "HH:MM" (24h), e.g. "20:00". */
   reminderTime?: string;
+  /** Opt-in for retreat/community pushes (separate from the daily reminder). */
+  pushNotifications?: boolean;
 }
 
 export interface UserProfile {
@@ -48,6 +51,12 @@ export interface SpiritualActivity {
   notes?: string;
   /** User-marked completion (e.g. a confession affirmation they've spoken). */
   completed?: boolean;
+  /**
+   * When a prayer was marked answered. Stored as a date rather than a flag
+   * because *when* the answer came is the part worth looking back on; absent or
+   * null means still praying.
+   */
+  answeredAt?: Timestamp | null;
   createdAt: Timestamp;
 }
 

@@ -2,6 +2,11 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
-    "jsx": "react-native"
+    "jsx": "react-native",
+    // Also set by expo/tsconfig.base, but repeated here so editors that fail to
+    // resolve the extended config (and silently fall back to compiler defaults)
+    // don't flag `import React from "react"` as needing esModuleInterop.
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true
   }
 }

@@ -2,18 +2,14 @@
   "expo": {
     "name": "Happy Place",
     "slug": "happy-place",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#F8F6F2"
-    },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.hackeronedev.happyplace"
+      "bundleIdentifier": "com.hackeronedev.happyplace",
+      "buildNumber": "2"
     },
     "android": {
       "adaptiveIcon": {
@@ -23,16 +19,37 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.hackeronedev.happyplace"
+      "package": "com.hackeronedev.happyplace",
+      "versionCode": 2,
+      "permissions": [
+        "android.permission.CAMERA"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-image",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#F8F6F2",
+          "imageWidth": 200
+        }
+      ],
       "expo-font",
       "expo-notifications",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Happy Place uses your photo library so you can choose a profile picture.",
+          "cameraPermission": "Happy Place uses your camera so you can take a profile picture.",
+          "microphonePermission": false
+        }
+      ]
     ]
   }
 }

@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import { parseTime } from '../utils/time';
 
 /**
  * Local notifications for the daily prayer reminder.
@@ -29,14 +30,6 @@ async function ensureAndroidChannel(): Promise<void> {
     name: 'Prayer Reminders',
     importance: Notifications.AndroidImportance.DEFAULT,
   });
-}
-
-/** Parse a "HH:MM" string into hour/minute, defaulting to 20:00 if malformed. */
-function parseTime(time: string): { hour: number; minute: number } {
-  const [h, m] = time.split(':').map((p) => parseInt(p, 10));
-  const hour = Number.isFinite(h) ? Math.min(Math.max(h, 0), 23) : 20;
-  const minute = Number.isFinite(m) ? Math.min(Math.max(m, 0), 59) : 0;
-  return { hour, minute };
 }
 
 /** Request notification permissions, returning whether they were granted. */

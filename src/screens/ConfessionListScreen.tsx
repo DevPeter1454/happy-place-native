@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -9,7 +9,6 @@ import {
   Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { Image } from "expo-image";
 import { MotiView } from "moti";
 import { ChevronLeft, CheckCircle2, Plus } from "lucide-react-native";
@@ -21,8 +20,12 @@ import {
   deleteActivity,
   setActivityCompleted,
 } from "../services/activities.service";
+import { cacheKeys } from "../services/cache";
+import { useCachedData } from "../hooks/useCachedData";
 import type { SpiritualActivity } from "../types/models";
 import { imageForEntry } from "../constants/moods";
+import { parseConfession } from "../utils/confessions";
+import type { RootStackScreenProps } from "../navigation/types";
 
 interface ConfessionView {
   id: string;
@@ -41,62 +44,37 @@ function isSameDay(a: Date, b: Date): boolean {
   );
 }
 
-/**
- * Confessions are stored as `confession` activities whose `notes` hold the
- * affirmation text and (optionally) a scripture reference, separated by a
- * blank line — the format written by AddConfessionScreen.
- */
+/** The shared parse plus the decorative image this screen shows. */
 function toConfession(activity: SpiritualActivity): ConfessionView {
-  const notes = activity.notes ?? "";
-  const [text, ...rest] = notes.split("\n\n");
-  const verse = rest.join("\n\n").trim();
-  return {
-    id: activity.id,
-    text: text.trim() || "(No text)",
-    verse: verse || undefined,
-    image: imageForEntry(activity.id),
-    date: activity.date ? activity.date.toDate() : new Date(),
-    completed: !!activity.completed,
-  };
+  const parsed = parseConfession(activity);
+  return { ...parsed, image: imageForEntry(activity.id) };
 }
 
-export function ConfessionListScreen() {
+export function ConfessionListScreen({
+  navigation,
+  route,
+}: RootStackScreenProps<"ConfessionList">) {
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation<any>();
   const { user } = useAuth();
   const { showToast } = useToast();
-  const [confessions, setConfessions] = useState<ConfessionView[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!user?.uid) {
-        setConfessions([]);
-        setLoading(false);
-        return;
-      }
-      let active = true;
-      setLoading(true);
-      listActivities(user.uid, "confession")
-        .then((result) => active && setConfessions(result.map(toConfession)))
-        .catch(() => active && setConfessions([]))
-        .finally(() => active && setLoading(false));
-      return () => {
-        active = false;
-      };
-    }, [user?.uid])
+  const uid = user?.uid;
+  const { data, loading, refresh, mutate } = useCachedData(
+    uid ? cacheKeys.confessions(uid) : null,
+    () => listActivities(uid!, "confession").then((r) => r.map(toConfession))
   );
+
+  const confessions = data ?? [];
 
   const toggleCompleted = (item: ConfessionView) => {
     if (!user?.uid) return;
     const next = !item.completed;
     // Optimistic update, then persist; revert on failure.
-    setConfessions((prev) =>
-      prev.map((c) => (c.id === item.id ? { ...c, completed: next } : c))
+    mutate((prev) =>
+      (prev ?? []).map((c) => (c.id === item.id ? { ...c, completed: next } : c))
     );
     setActivityCompleted(user.uid, item.id, next).catch(() => {
-      setConfessions((prev) =>
-        prev.map((c) => (c.id === item.id ? { ...c, completed: !next } : c))
+      mutate((prev) =>
+        (prev ?? []).map((c) => (c.id === item.id ? { ...c, completed: !next } : c))
       );
     });
   };
@@ -110,18 +88,40 @@ export function ConfessionListScreen() {
         onPress: () => {
           if (!user?.uid) return;
           // Optimistic removal; reload to restore on failure.
-          setConfessions((prev) => prev.filter((c) => c.id !== item.id));
+          mutate((prev) => (prev ?? []).filter((c) => c.id !== item.id));
           showToast("Confession deleted");
           deleteActivity(user.uid, item.id).catch(() => {
-            if (user.uid) {
-              listActivities(user.uid, "confession").then((r) =>
-                setConfessions(r.map(toConfession))
-              );
-            }
+            refresh();
           });
         },
       },
     ]);
+  };
+
+  // Opening a specific confession (from the dashboard or the tracker): scroll it
+  // into view once it has laid out, and emphasise it briefly so it's obvious
+  // which one was meant.
+  const highlightId = route.params?.highlightId;
+  const scrollRef = useRef<ScrollView>(null);
+  const [highlighted, setHighlighted] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (!highlightId) return;
+    setHighlighted(highlightId);
+    const timer = setTimeout(() => {
+      setHighlighted(undefined);
+      // Clear the param so coming back to this screen doesn't scroll again.
+      navigation.setParams({ highlightId: undefined });
+    }, 2400);
+    return () => clearTimeout(timer);
+  }, [highlightId, navigation]);
+
+  const scrollToHighlighted = (id: string, y: number) => {
+    if (id !== highlightId) return;
+    // A frame's grace so the scroll lands after layout settles.
+    requestAnimationFrame(() =>
+      scrollRef.current?.scrollTo({ y: Math.max(y - spacing.xl, 0), animated: true }),
+    );
   };
 
   // The confession that fulfilled today's dashboard task is the earliest one
@@ -143,6 +143,7 @@ export function ConfessionListScreen() {
       </View>
 
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={[
           styles.scrollContent,
           { paddingBottom: Math.max(insets.bottom, spacing.xl) + 80 },
@@ -164,7 +165,11 @@ export function ConfessionListScreen() {
               from={{ opacity: 0, translateY: 20 }}
               animate={{ opacity: 1, translateY: 0 }}
               transition={{ type: "timing", duration: 500, delay: index * 100 }}
-              style={styles.card}
+              onLayout={(e) => scrollToHighlighted(item.id, e.nativeEvent.layout.y)}
+              style={[
+                styles.card,
+                highlighted === item.id && styles.cardHighlighted,
+              ]}
             >
               {/* Long-press the card to delete (YouVersion-style action). */}
               <Pressable
@@ -229,7 +234,7 @@ export function ConfessionListScreen() {
 
       <Pressable 
         style={[styles.fab, { bottom: insets.bottom + 90 }]}
-        onPress={() => navigation.navigate("AddConfession" as never)}
+        onPress={() => navigation.navigate("AddConfession")}
       >
         <Plus size={28} color={colors.white} />
       </Pressable>
@@ -296,6 +301,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(138, 110, 71, 0.05)",
     ...shadows.sm,
+  },
+  cardHighlighted: {
+    borderColor: colors.primaryGold,
+    borderWidth: 2,
+    ...shadows.md,
   },
   cardMain: {
     flexDirection: "row",

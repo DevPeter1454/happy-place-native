@@ -383,6 +383,9 @@ export function RetreatScreen() {
                 value={pickerTarget === "start" ? startDate : endDate}
                 mode="date"
                 display="spinner"
+                // See ProfileScreen: pinned light so the wheel text stays dark.
+                themeVariant="light"
+                textColor={colors.textPrimary}
                 onChange={onPickDate}
               />
               <Pressable

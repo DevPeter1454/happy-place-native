@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -11,19 +11,22 @@ import {
   Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useFocusEffect } from "@react-navigation/native";
 import { MotiView } from "moti";
 import DateTimePicker, {
   type DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
 import {
-  ArrowLeft,
   Settings,
   BellRing,
   Plus,
   ScrollText,
   ChevronLeft,
-  ChevronRight,
+  Check,
+  CheckCircle2,
+  Play,
+  Square,
+  X,
+  Timer,
 } from "lucide-react-native";
 import {
   colors,
@@ -35,181 +38,31 @@ import {
 } from "../theme";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { listActivities, getStats } from "../services/activities.service";
+import {
+  addActivity,
+  listActivities,
+  getStats,
+} from "../services/activities.service";
 import { updateProfile } from "../services/user.service";
 import {
   ensurePermissions,
   scheduleDailyPrayerReminder,
 } from "../services/notifications.service";
-import { AddPrayerModal } from "../components/prayer/AddPrayerModal";
-import type { SpiritualActivity, UserStats } from "../types/models";
+import { cacheKeys } from "../services/cache";
+import { useCachedData } from "../hooks/useCachedData";
+import { MonthlyStats } from "../components/tracker/MonthlyStats";
+import { MonthCalendar } from "../components/tracker/MonthCalendar";
+import { useMonthlyProgress } from "../hooks/useMonthlyProgress";
+import { usePrayerTimer } from "../hooks/usePrayerTimer";
+import {
+  DEFAULT_REMINDER,
+  dateToTime,
+  formatDuration,
+  formatStopwatch,
+  formatTime,
+  timeToDate,
+} from "../utils/time";
 import type { RootStackScreenProps } from "../navigation/types";
-
-const DAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
-const DEFAULT_REMINDER = "20:00";
-
-type DayStatus = "completed" | "missed" | "today" | "future";
-
-function pad(n: number): string {
-  return String(n).padStart(2, "0");
-}
-
-/** Format a "HH:MM" 24h string as a friendly 12h label, e.g. "8:00 PM". */
-function formatTime(time: string): string {
-  const [h, m] = time.split(":").map((p) => parseInt(p, 10));
-  const hour = Number.isFinite(h) ? h : 20;
-  const minute = Number.isFinite(m) ? m : 0;
-  const period = hour >= 12 ? "PM" : "AM";
-  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
-  return `${hour12}:${pad(minute)} ${period}`;
-}
-
-// --- Stat Pill Component ---
-function StatPill({
-  value,
-  label,
-  color,
-}: {
-  value: string;
-  label: string;
-  color: string;
-}) {
-  return (
-    <View style={statPillStyles.container}>
-      <Text style={[statPillStyles.value, { color }]}>{value}</Text>
-      <Text style={statPillStyles.label}>{label}</Text>
-    </View>
-  );
-}
-
-const statPillStyles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.white,
-    paddingVertical: spacing.lg,
-    borderRadius: radii.lg,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: colors.primaryLight05,
-    ...shadows.sm,
-  },
-  value: {
-    fontFamily: fontFamilies.sans,
-    fontSize: fontSizes["2xl"],
-    fontWeight: "700",
-  },
-  label: {
-    fontFamily: fontFamilies.sans,
-    fontSize: 10,
-    fontWeight: "600",
-    color: colors.textPlaceholder,
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    marginTop: 2,
-  },
-});
-
-// --- Calendar Day Component ---
-function CalendarDay({ day, status }: { day: number; status: DayStatus }) {
-  const dayStyles = useMemo(() => {
-    switch (status) {
-      case "completed":
-        return { bg: colors.primary, text: colors.white };
-      case "missed":
-        return { bg: colors.missedBg, text: colors.missed };
-      case "today":
-        return { bg: "transparent", text: colors.primary, border: true };
-      case "future":
-      default:
-        return { bg: "transparent", text: "#CBD5E1" };
-    }
-  }, [status]);
-
-  return (
-    <View style={calDayStyles.wrapper}>
-      <View
-        style={[
-          calDayStyles.circle,
-          { backgroundColor: dayStyles.bg },
-          status === "today" && calDayStyles.todayBorder,
-        ]}
-      >
-        <Text style={[calDayStyles.text, { color: dayStyles.text }]}>
-          {day}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-const calDayStyles = StyleSheet.create({
-  wrapper: {
-    width: "14.28%",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 6,
-  },
-  circle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  todayBorder: {
-    borderWidth: 2,
-    borderColor: colors.primary,
-  },
-  text: {
-    fontFamily: fontFamilies.sans,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-});
-
-// --- Legend Component ---
-function LegendItem({
-  color,
-  borderColor,
-  label,
-}: {
-  color?: string;
-  borderColor?: string;
-  label: string;
-}) {
-  return (
-    <View style={legendStyles.item}>
-      <View
-        style={[
-          legendStyles.dot,
-          color ? { backgroundColor: color } : undefined,
-          borderColor
-            ? { borderWidth: 2, borderColor, backgroundColor: "transparent" }
-            : undefined,
-        ]}
-      />
-      <Text style={legendStyles.label}>{label}</Text>
-    </View>
-  );
-}
-
-const legendStyles = StyleSheet.create({
-  item: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  label: {
-    fontFamily: fontFamilies.sans,
-    fontSize: 12,
-    color: colors.textMuted,
-  },
-});
 
 // --- Main Screen ---
 export function PrayerTrackerScreen({
@@ -219,148 +72,106 @@ export function PrayerTrackerScreen({
   const { user, profile, refreshProfile } = useAuth();
   const { showToast } = useToast();
 
-  const [activities, setActivities] = useState<SpiritualActivity[]>([]);
-  const [stats, setStats] = useState<UserStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [addOpen, setAddOpen] = useState(false);
+  const [marking, setMarking] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerValue, setPickerValue] = useState(new Date());
 
-  const reloadPrayerData = useCallback(() => {
-    if (!user?.uid) return;
-    Promise.all([listActivities(user.uid, "prayer"), getStats(user.uid)])
-      .then(([acts, s]) => {
-        setActivities(acts);
-        setStats(s);
-      })
-      .catch(() => {});
-  }, [user?.uid]);
+  const uid = user?.uid;
+  const { data, loading, refresh: reloadPrayerData } = useCachedData(
+    uid ? cacheKeys.prayerTracker(uid) : null,
+    async () => {
+      const [activities, stats] = await Promise.all([
+        listActivities(uid!, "prayer"),
+        getStats(uid!),
+      ]);
+      return { activities, stats };
+    },
+  );
+  const activities = data?.activities ?? [];
+  const stats = data?.stats ?? null;
 
   const reminderTime = profile?.preferences?.reminderTime ?? DEFAULT_REMINDER;
 
-  // Load this user's prayer activities + aggregate stats whenever focused.
-  useFocusEffect(
-    useCallback(() => {
-      if (!user?.uid) {
-        setActivities([]);
-        setStats(null);
-        setLoading(false);
-        return;
-      }
-      let active = true;
-      setLoading(true);
-      Promise.all([listActivities(user.uid, "prayer"), getStats(user.uid)])
-        .then(([acts, s]) => {
-          if (!active) return;
-          setActivities(acts);
-          setStats(s);
-        })
-        .catch(() => {
-          if (!active) return;
-          setActivities([]);
-          setStats(null);
-        })
-        .finally(() => active && setLoading(false));
-      return () => {
-        active = false;
-      };
-    }, [user?.uid]),
-  );
+  const timer = usePrayerTimer();
 
-  // "Now", captured once per mount — defines today and the latest viewable month.
-  const now = useMemo(() => new Date(), []);
-  const today = now.getDate();
-
-  // The month currently being viewed; starts on the current month and can be
-  // paged backwards through history but never ahead of the current month.
-  const [view, setView] = useState({
-    year: now.getFullYear(),
-    month: now.getMonth(),
-  });
-
-  const isCurrentMonth =
-    view.year === now.getFullYear() && view.month === now.getMonth();
-  const isPastMonth =
-    view.year < now.getFullYear() ||
-    (view.year === now.getFullYear() && view.month < now.getMonth());
-
-  const daysInMonth = new Date(view.year, view.month + 1, 0).getDate();
-  // Monday-start grid: shift Sun(0)..Sat(6) so Monday is column 0.
-  const firstWeekday = (new Date(view.year, view.month, 1).getDay() + 6) % 7;
-  const monthName = new Date(view.year, view.month, 1).toLocaleString(
-    "default",
-    { month: "long", year: "numeric" },
-  );
-
-  const goPrevMonth = () =>
-    setView((v) =>
-      v.month === 0
-        ? { year: v.year - 1, month: 11 }
-        : { year: v.year, month: v.month - 1 },
-    );
-  const goNextMonth = () => {
-    if (isCurrentMonth) return; // can't view months ahead of now
-    setView((v) =>
-      v.month === 11
-        ? { year: v.year + 1, month: 0 }
-        : { year: v.year, month: v.month + 1 },
-    );
+  /**
+   * End the session and log it. The activity carries the duration, so stopping
+   * the timer also marks today done — it's the richer form of "mark as done".
+   */
+  const stopAndLog = async () => {
+    const minutes = await timer.stop();
+    if (minutes === null || !user?.uid) return;
+    try {
+      await addActivity(user.uid, { type: "prayer", durationMinutes: minutes });
+      await reloadPrayerData();
+      showToast(`Logged ${formatDuration(minutes)} of prayer 🙏`);
+    } catch {
+      Alert.alert(
+        "Couldn't save",
+        `Your ${formatDuration(minutes)} wasn't recorded. Please try again.`,
+      );
+    }
   };
 
-  // Day-of-month numbers with a logged prayer in the viewed month.
-  const completedDays = useMemo(() => {
-    const set = new Set<number>();
-    for (const a of activities) {
+  const confirmDiscard = () => {
+    Alert.alert("Discard this session?", "The time won't be recorded.", [
+      { text: "Keep going", style: "cancel" },
+      {
+        text: "Discard",
+        style: "destructive",
+        onPress: () => timer.discard(),
+      },
+    ]);
+  };
+
+  // The hook works in plain dates so journal entries can share it.
+  const loggedDates = useMemo(
+    () =>
+      activities
+        .map((a) => a.date?.toDate?.())
+        .filter((d): d is Date => !!d),
+    [activities],
+  );
+  const progress = useMonthlyProgress(loggedDates);
+
+  // Minutes prayed in the month being viewed, from sessions that recorded one.
+  const minutesThisMonth = useMemo(() => {
+    const { year, month } = progress.view;
+    return activities.reduce((total, a) => {
       const d = a.date?.toDate?.();
-      if (d && d.getFullYear() === view.year && d.getMonth() === view.month) {
-        set.add(d.getDate());
-      }
+      if (!d || d.getFullYear() !== year || d.getMonth() !== month) return total;
+      return total + (a.durationMinutes ?? 0);
+    }, 0);
+  }, [activities, progress.view]);
+  const { todayLogged } = progress;
+
+  /**
+   * Log today's prayer with no text. A prayer activity is what marks the day
+   * complete, so this and saving a written prayer are two routes to the same
+   * outcome — the user shouldn't have to write something to keep their streak.
+   */
+  const markTodayDone = async () => {
+    if (!user?.uid || marking || todayLogged) return;
+    setMarking(true);
+    try {
+      await addActivity(user.uid, { type: "prayer" });
+      await reloadPrayerData();
+      showToast("Marked as prayed today 🙏");
+    } catch {
+      Alert.alert("Couldn't save", "Please try again.");
+    } finally {
+      setMarking(false);
     }
-    return set;
-  }, [activities, view]);
-
-  const daysCompleted = completedDays.size;
-  // Days that should have had a prayer but didn't: elapsed days of the current
-  // month, or every day of a fully-past month.
-  const daysMissed = useMemo(() => {
-    const upTo = isCurrentMonth ? today - 1 : isPastMonth ? daysInMonth : 0;
-    let missed = 0;
-    for (let d = 1; d <= upTo; d++) if (!completedDays.has(d)) missed++;
-    return missed;
-  }, [completedDays, isCurrentMonth, isPastMonth, today, daysInMonth]);
-  const consistency =
-    daysCompleted + daysMissed > 0
-      ? Math.round((daysCompleted / (daysCompleted + daysMissed)) * 100)
-      : 0;
-
-  const dayStatus = useCallback(
-    (day: number): DayStatus => {
-      if (completedDays.has(day)) return "completed";
-      if (isCurrentMonth) {
-        if (day === today) return "today";
-        return day < today ? "missed" : "future";
-      }
-      return isPastMonth ? "missed" : "future";
-    },
-    [completedDays, isCurrentMonth, isPastMonth, today],
-  );
-
-  const days = useMemo(
-    () => Array.from({ length: daysInMonth }, (_, i) => i + 1),
-    [daysInMonth],
-  );
+  };
 
   const openPicker = () => {
-    const [h, m] = reminderTime.split(":").map((p) => parseInt(p, 10));
-    const d = new Date();
-    d.setHours(Number.isFinite(h) ? h : 20, Number.isFinite(m) ? m : 0, 0, 0);
-    setPickerValue(d);
+    setPickerValue(timeToDate(reminderTime));
     setPickerOpen(true);
   };
 
   const persistReminder = async (date: Date) => {
     if (!user?.uid) return;
-    const newTime = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    const newTime = dateToTime(date);
     try {
       const granted = await ensurePermissions();
       await updateProfile(user.uid, {
@@ -404,7 +215,7 @@ export function PrayerTrackerScreen({
             pressed && styles.headerBtnPressed,
           ]}
         >
-          <ArrowLeft size={22} color={colors.primary} />
+          <ChevronLeft size={24} color={colors.primary} />
         </Pressable>
         <Text style={styles.headerTitle}>Prayer Tracker</Text>
         <Pressable
@@ -449,17 +260,114 @@ export function PrayerTrackerScreen({
             </Pressable>
           </View>
 
-          {/* Add Prayer */}
+          {/* Prayer timer. Keeps running with the app closed or the phone
+              locked, so it can be started and simply prayed. */}
+          <View style={styles.timerCard}>
+            <View style={styles.timerHeader}>
+              <Timer size={16} color={colors.primary} />
+              <Text style={styles.timerLabel}>PRAYER TIMER</Text>
+            </View>
+
+            {timer.startedAt !== null ? (
+              <>
+                <Text style={styles.timerValue}>
+                  {formatStopwatch(timer.elapsedSeconds)}
+                </Text>
+                <Text style={styles.timerHint}>
+                  Lock your phone if you like — the time keeps counting.
+                </Text>
+                <View style={styles.timerActions}>
+                  <Pressable
+                    onPress={stopAndLog}
+                    style={({ pressed }) => [
+                      styles.timerStop,
+                      pressed && styles.markButtonPressed,
+                    ]}
+                  >
+                    <Square size={18} color={colors.white} />
+                    <Text style={styles.timerStopText}>Stop &amp; Save</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={confirmDiscard}
+                    style={({ pressed }) => [
+                      styles.timerDiscard,
+                      pressed && styles.dim,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Discard session"
+                  >
+                    <X size={20} color={colors.textMuted} />
+                  </Pressable>
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.timerIdle}>
+                  {minutesThisMonth > 0
+                    ? `${formatDuration(minutesThisMonth)} prayed this month`
+                    : "Time your prayer and it counts toward today"}
+                </Text>
+                <Pressable
+                  onPress={timer.start}
+                  disabled={!timer.ready}
+                  style={({ pressed }) => [
+                    styles.timerStart,
+                    pressed && styles.markButtonPressed,
+                    !timer.ready && styles.dim,
+                  ]}
+                >
+                  <Play size={18} color={colors.white} />
+                  <Text style={styles.timerStopText}>Start Praying</Text>
+                </Pressable>
+              </>
+            )}
+          </View>
+
+          {/* Today's prayer: mark it done outright, or write one */}
+          {todayLogged ? (
+            <View style={[styles.markButton, styles.markButtonDone]}>
+              <CheckCircle2 size={22} color={colors.success} />
+              <Text style={[styles.markButtonText, styles.markButtonDoneText]}>
+                Prayed Today
+              </Text>
+            </View>
+          ) : (
+            <Pressable
+              onPress={markTodayDone}
+              disabled={marking}
+              style={({ pressed }) => [
+                styles.markButton,
+                pressed && styles.markButtonPressed,
+                marking && styles.markButtonBusy,
+              ]}
+            >
+              {marking ? (
+                <ActivityIndicator color={colors.white} />
+              ) : (
+                <>
+                  <Check size={22} color={colors.white} />
+                  <Text style={styles.markButtonText}>Mark Today as Done</Text>
+                </>
+              )}
+            </Pressable>
+          )}
+
           <Pressable
-            onPress={() => setAddOpen(true)}
+            onPress={() => navigation.navigate("AddPrayer")}
             style={({ pressed }) => [
-              styles.markButton,
-              pressed && styles.markButtonPressed,
+              styles.addPrayerBtn,
+              pressed && styles.editBtnPressed,
             ]}
           >
-            <Plus size={22} color={colors.white} />
-            <Text style={styles.markButtonText}>Add Prayer</Text>
+            <Plus size={18} color={colors.primary} />
+            <Text style={styles.addPrayerText}>Add a Prayer</Text>
           </Pressable>
+
+          <Text style={styles.markHint}>
+            {todayLogged
+              ? "Today already counts. Add a prayer any time you want to keep one."
+              : "Writing a prayer marks today done too — either one counts."}
+          </Text>
 
           {/* My Prayers link */}
           <Pressable
@@ -473,92 +381,20 @@ export function PrayerTrackerScreen({
             <Text style={styles.myPrayersText}>My Prayers</Text>
           </Pressable>
 
-          {/* Monthly Stats */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Monthly Stats</Text>
-            <View style={styles.statsRow}>
-              <StatPill
-                value={String(daysCompleted)}
-                label="Days"
-                color={colors.primary}
-              />
-              <StatPill
-                value={String(daysMissed)}
-                label="Missed"
-                color="#CBD5E1"
-              />
-              <StatPill
-                value={`${consistency}%`}
-                label="Consistency"
-                color={colors.primaryGold}
-              />
-            </View>
-            {stats && isCurrentMonth ? (
-              <Text style={styles.streakNote}>
-                Current streak: {stats.currentStreak} day
-                {stats.currentStreak === 1 ? "" : "s"} · Longest:{" "}
-                {stats.longestStreak}
-              </Text>
-            ) : null}
-          </View>
+          <MonthlyStats
+            progress={progress}
+            stats={stats}
+            extra={[
+              {
+                value: formatDuration(minutesThisMonth),
+                label: "Time Prayed",
+                color: colors.primary,
+              },
+            ]}
+          />
 
           {/* History Calendar */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>History</Text>
-              <View style={styles.monthLabel}>
-                <Pressable
-                  onPress={goPrevMonth}
-                  hitSlop={8}
-                  style={({ pressed }) => pressed && styles.monthNavPressed}
-                >
-                  <ChevronLeft size={18} color={colors.primary} />
-                </Pressable>
-                <Text style={styles.monthText}>{monthName}</Text>
-                <Pressable
-                  onPress={goNextMonth}
-                  hitSlop={8}
-                  disabled={isCurrentMonth}
-                  style={({ pressed }) => pressed && styles.monthNavPressed}
-                >
-                  <ChevronRight
-                    size={18}
-                    color={
-                      isCurrentMonth ? colors.primaryLight30 : colors.primary
-                    }
-                  />
-                </Pressable>
-              </View>
-            </View>
-
-            <View style={styles.calendarCard}>
-              {/* Day labels */}
-              <View style={styles.calendarGrid}>
-                {DAY_LABELS.map((label, i) => (
-                  <View key={`label-${i}`} style={styles.dayLabelCell}>
-                    <Text style={styles.dayLabelText}>{label}</Text>
-                  </View>
-                ))}
-
-                {/* Leading blanks so day 1 lands under its weekday */}
-                {Array.from({ length: firstWeekday }).map((_, i) => (
-                  <View key={`blank-${i}`} style={calDayStyles.wrapper} />
-                ))}
-
-                {/* Calendar days */}
-                {days.map((day) => (
-                  <CalendarDay key={day} day={day} status={dayStatus(day)} />
-                ))}
-              </View>
-
-              {/* Legend */}
-              <View style={styles.legend}>
-                <LegendItem color={colors.primary} label="Completed" />
-                <LegendItem color={colors.missedBg} label="Missed" />
-                <LegendItem borderColor={colors.primary} label="Today" />
-              </View>
-            </View>
-          </View>
+          <MonthCalendar progress={progress} completedLabel="Prayed" />
         </ScrollView>
       )}
 
@@ -588,6 +424,9 @@ export function PrayerTrackerScreen({
                 value={pickerValue}
                 mode="time"
                 display="spinner"
+                // See ProfileScreen: pinned light so the wheel text stays dark.
+                themeVariant="light"
+                textColor={colors.textPrimary}
                 onChange={(_e, date) => date && setPickerValue(date)}
               />
               <View style={styles.modalActions}>
@@ -619,11 +458,6 @@ export function PrayerTrackerScreen({
         </Modal>
       ) : null}
 
-      <AddPrayerModal
-        visible={addOpen}
-        onClose={() => setAddOpen(false)}
-        onSaved={reloadPrayerData}
-      />
     </MotiView>
   );
 }
@@ -747,6 +581,133 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
     ...shadows.lg,
   },
+  timerCard: {
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.primaryLight05,
+    padding: spacing.xl,
+    alignItems: "center",
+    gap: spacing.md,
+    ...shadows.sm,
+  },
+  timerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  timerLabel: {
+    fontFamily: fontFamilies.sans,
+    fontSize: fontSizes.xs,
+    fontWeight: "700",
+    color: colors.primary,
+    letterSpacing: 1.5,
+  },
+  timerValue: {
+    fontFamily: fontFamilies.serif,
+    fontSize: 48,
+    fontWeight: "700",
+    color: colors.textPrimary,
+    // Keeps the digits from nudging the layout as they change width.
+    fontVariant: ["tabular-nums"],
+  },
+  timerHint: {
+    fontFamily: fontFamilies.sans,
+    fontSize: 12,
+    color: colors.textMuted,
+    textAlign: "center",
+  },
+  timerIdle: {
+    fontFamily: fontFamilies.sans,
+    fontSize: fontSizes.sm,
+    color: colors.textMuted,
+    textAlign: "center",
+  },
+  timerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    alignSelf: "stretch",
+  },
+  timerStart: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    alignSelf: "stretch",
+    paddingVertical: spacing.lg,
+    borderRadius: radii.lg,
+    backgroundColor: colors.primary,
+    ...shadows.md,
+  },
+  timerStop: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.lg,
+    borderRadius: radii.lg,
+    backgroundColor: colors.primary,
+    ...shadows.md,
+  },
+  timerStopText: {
+    fontFamily: fontFamilies.sans,
+    fontSize: fontSizes.base,
+    fontWeight: "700",
+    color: colors.white,
+  },
+  timerDiscard: {
+    width: 52,
+    paddingVertical: spacing.lg,
+    borderRadius: radii.lg,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  dim: {
+    opacity: 0.6,
+  },
+  markButtonDone: {
+    backgroundColor: colors.successBg,
+    borderWidth: 1,
+    borderColor: colors.success,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  markButtonDoneText: {
+    color: colors.success,
+  },
+  markButtonBusy: {
+    opacity: 0.7,
+  },
+  addPrayerBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    paddingVertical: spacing.md,
+    borderRadius: radii.lg,
+    borderWidth: 1.5,
+    borderColor: colors.primaryLight30,
+  },
+  addPrayerText: {
+    fontFamily: fontFamilies.sans,
+    fontSize: fontSizes.base,
+    fontWeight: "700",
+    color: colors.primary,
+  },
+  markHint: {
+    fontFamily: fontFamilies.sans,
+    fontSize: 11,
+    color: colors.textMuted,
+    textAlign: "center",
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    lineHeight: 16,
+  },
   markButtonPressed: {
     backgroundColor: colors.primaryDark,
     transform: [{ scale: 0.97 }],
@@ -760,77 +721,15 @@ const styles = StyleSheet.create({
   },
 
   // Sections
-  section: {
-    gap: spacing.lg,
-  },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  sectionTitle: {
-    fontFamily: fontFamilies.serif,
-    fontSize: fontSizes.xl,
-    fontWeight: "700",
-    color: colors.textPrimary,
-  },
-  statsRow: {
-    flexDirection: "row",
-    gap: spacing.md,
-  },
-  monthLabel: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  monthText: {
-    fontFamily: fontFamilies.sans,
-    fontSize: 12,
-    fontWeight: "500",
-    color: colors.textPlaceholder,
-    minWidth: 96,
-    textAlign: "center",
-  },
-  monthNavPressed: {
-    opacity: 0.5,
-  },
 
   // Calendar
-  calendarCard: {
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    padding: spacing.xl,
-    borderWidth: 1,
-    borderColor: colors.primaryLight05,
-    ...shadows.sm,
-  },
-  calendarGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-  },
-  dayLabelCell: {
-    width: "14.28%",
-    alignItems: "center",
-    paddingVertical: 6,
-  },
-  dayLabelText: {
-    fontFamily: fontFamilies.sans,
-    fontSize: 10,
-    fontWeight: "700",
-    color: colors.textPlaceholder,
-    textTransform: "uppercase",
-  },
 
   // Legend
-  legend: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: spacing.xl,
-    marginTop: spacing.xl,
-    paddingTop: spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: colors.primaryLight05,
-  },
 
   // Loading / states
   loadingState: {
@@ -840,12 +739,6 @@ const styles = StyleSheet.create({
   },
   markButtonDisabled: {
     opacity: 0.6,
-  },
-  streakNote: {
-    fontFamily: fontFamilies.sans,
-    fontSize: fontSizes.sm,
-    color: colors.textMuted,
-    textAlign: "center",
   },
 
   // Time picker modal (iOS)

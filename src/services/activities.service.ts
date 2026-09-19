@@ -3,6 +3,7 @@ import {
   doc,
   addDoc,
   deleteDoc,
+  deleteField,
   getDoc,
   getDocs,
   setDoc,
@@ -152,6 +153,24 @@ export async function deleteActivity(
   activityId: string
 ): Promise<void> {
   await deleteDoc(doc(db, 'users', uid, 'activities', activityId));
+}
+
+/**
+ * Mark a prayer answered (stamping the moment) or back to unanswered.
+ *
+ * The field is removed rather than written as null when un-marking, so
+ * `answeredAt` is either a real date or absent.
+ */
+export async function setActivityAnswered(
+  uid: string,
+  activityId: string,
+  answered: boolean
+): Promise<void> {
+  await setDoc(
+    doc(db, 'users', uid, 'activities', activityId),
+    { answeredAt: answered ? serverTimestamp() : deleteField() },
+    { merge: true }
+  );
 }
 
 /** Set the user-marked completion flag on an activity. */

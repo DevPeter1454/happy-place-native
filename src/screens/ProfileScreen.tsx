@@ -1,72 +1,187 @@
 import React from "react";
-import { View, Text, ScrollView, Pressable, StyleSheet, Switch } from "react-native";
+import {
+  View,
+  Text,
+  ScrollView,
+  Pressable,
+  StyleSheet,
+  Switch,
+  Modal,
+  Platform,
+  ActivityIndicator,
+  Alert,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Image } from "expo-image";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import Constants from "expo-constants";
 import { MotiView } from "moti";
-import { ChevronRight, Bell, Shield, CircleHelp, LogOut, ChevronLeft, User, Pencil } from "lucide-react-native";
+import DateTimePicker, {
+  type DateTimePickerEvent,
+} from "@react-native-community/datetimepicker";
+import {
+  ChevronRight,
+  BellRing,
+  Smartphone,
+  Shield,
+  CircleHelp,
+  LogOut,
+  ChevronLeft,
+  User,
+  Pencil,
+  Clock,
+} from "lucide-react-native";
 import { colors, fontFamilies, fontSizes, spacing, radii, shadows } from "../theme";
 import { useAuth } from "../context/AuthContext";
 import { useTabBarVisibility } from "../context/TabBarContext";
-import { updateProfile } from "../services/user.service";
+import { useToast } from "../context/ToastContext";
+import { useAvatarUpload } from "../hooks/useAvatarUpload";
+import { Avatar } from "../components/profile/Avatar";
+import { PhotoSourceSheet } from "../components/profile/PhotoSourceSheet";
+import { updatePreferences } from "../services/user.service";
 import {
   ensurePermissions,
   scheduleDailyPrayerReminder,
   cancelPrayerReminder,
 } from "../services/notifications.service";
+import {
+  DEFAULT_REMINDER,
+  dateToTime,
+  formatTime,
+  timeToDate,
+} from "../utils/time";
+import type { RootStackParamList } from "../navigation/types";
 
-const DEFAULT_REMINDER = "20:00";
-
-const FALLBACK_AVATAR =
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuD8elyt9jBN6VgtRWx24O1TIUQvbtRerOk1fIvJoXkWBECpgNa8Ec-z3w97A6cLkQtCi6UK0hZU69G70fZnaNTA8wtX90OD9Rp80YlR6Muvl6VFIZa7f7F4rBqj1ZcOHGwOvgxj8pfVMT-3QSv6xESKa6eT5eT6xGI-eg0pGgECwV_0eCX4biKkMLyyGda_tY-zKMTFDwqu16bZYxyXoaM2pcov6ehiQBgQ0LY1ItUJvOLXBEQCKGVKNzWbrvmyq1DkEERlyP8MNveC";
+type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 export function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<Nav>();
   const { user, profile, signOut, refreshProfile } = useAuth();
   const { onScroll } = useTabBarVisibility();
-  const [savingReminder, setSavingReminder] = React.useState(false);
-  const [notificationsEnabled, setNotificationsEnabled] = React.useState(false);
+  const { showToast } = useToast();
+  const avatar = useAvatarUpload();
 
-  // Reflects the persisted preference; the prayer reminder is gated on this.
+  const [savingPrefs, setSavingPrefs] = React.useState(false);
+  const [sheetOpen, setSheetOpen] = React.useState(false);
+  const [pickerOpen, setPickerOpen] = React.useState(false);
+  const [pickerValue, setPickerValue] = React.useState(() =>
+    timeToDate(DEFAULT_REMINDER),
+  );
+
+  // Preferences are the source of truth; both switches read straight from them
+  // so what's on screen always matches what's persisted.
   const remindersEnabled = profile?.preferences?.notifications ?? true;
-
-  const toggleReminders = async (value: boolean) => {
-    if (!user?.uid || savingReminder) return;
-    setSavingReminder(true);
-    try {
-      await updateProfile(user.uid, {
-        preferences: {
-          ...(profile?.preferences ?? { notifications: true }),
-          notifications: value,
-        },
-      });
-      await refreshProfile();
-      if (value) {
-        const granted = await ensurePermissions();
-        if (granted) {
-          await scheduleDailyPrayerReminder(
-            profile?.preferences?.reminderTime ?? DEFAULT_REMINDER,
-          );
-        }
-      } else {
-        await cancelPrayerReminder();
-      }
-    } catch {
-      // Best-effort: refreshProfile keeps the switch in sync with what persisted.
-    } finally {
-      setSavingReminder(false);
-    }
-  };
+  const pushEnabled = profile?.preferences?.pushNotifications ?? false;
+  const reminderTime = profile?.preferences?.reminderTime ?? DEFAULT_REMINDER;
 
   const displayName = profile?.fullName ?? user?.displayName ?? "Friend";
   const displayEmail = profile?.email ?? user?.email ?? "";
-  const avatarUri = profile?.photoURL ?? user?.photoURL ?? FALLBACK_AVATAR;
+  const appVersion = Constants.expoConfig?.version ?? "1.0.0";
+
+  /** Persist a preferences patch, then re-read the profile so the UI follows. */
+  const savePreferences = async (
+    patch: Parameters<typeof updatePreferences>[2],
+    after?: () => Promise<void>,
+  ) => {
+    if (!user?.uid || savingPrefs) return;
+    setSavingPrefs(true);
+    try {
+      await updatePreferences(user.uid, profile?.preferences, patch);
+      await refreshProfile();
+      await after?.();
+    } catch {
+      Alert.alert("Couldn't save", "Please try again.");
+      // Re-read so a failed write can't leave the switch showing a lie.
+      await refreshProfile().catch(() => {});
+    } finally {
+      setSavingPrefs(false);
+    }
+  };
+
+  const toggleReminders = (value: boolean) =>
+    savePreferences({ notifications: value }, async () => {
+      if (!value) {
+        await cancelPrayerReminder();
+        return;
+      }
+      const granted = await ensurePermissions();
+      if (granted) {
+        await scheduleDailyPrayerReminder(reminderTime);
+        showToast(`Reminder set for ${formatTime(reminderTime)}`);
+      } else {
+        showToast("Allow notifications to be reminded");
+      }
+    });
+
+  const togglePush = (value: boolean) =>
+    savePreferences({ pushNotifications: value }, async () => {
+      // Opting in is only meaningful once the OS has granted permission.
+      if (value && !(await ensurePermissions())) {
+        showToast("Allow notifications in Settings to receive updates");
+      }
+    });
+
+  const openTimePicker = () => {
+    setPickerValue(timeToDate(reminderTime));
+    setPickerOpen(true);
+  };
+
+  const saveReminderTime = (date: Date) => {
+    const time = dateToTime(date);
+    savePreferences({ reminderTime: time }, async () => {
+      if (!remindersEnabled) {
+        showToast(`Reminder time set to ${formatTime(time)}`);
+        return;
+      }
+      const granted = await ensurePermissions();
+      if (granted) await scheduleDailyPrayerReminder(time);
+      showToast(
+        granted
+          ? `Reminder set for ${formatTime(time)}`
+          : "Saved — allow notifications to be reminded",
+      );
+    });
+  };
+
+  // Android shows a dialog reporting the result through onChange; iOS uses an
+  // inline spinner in a modal with an explicit Done.
+  const onAndroidPicked = (event: DateTimePickerEvent, date?: Date) => {
+    setPickerOpen(false);
+    if (event.type === "set" && date) saveReminderTime(date);
+  };
+
+  const confirmSignOut = () => {
+    Alert.alert("Log out?", "You'll need to sign in again to continue.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Log out",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await signOut();
+          } catch {
+            Alert.alert("Couldn't log out", "Please try again.");
+          }
+        },
+      },
+    ]);
+  };
 
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: Math.max(insets.top, spacing.md) }]}>
-        <Pressable style={styles.headerButton}>
-          <ChevronLeft size={24} color={colors.primary} />
-        </Pressable>
+        {navigation.canGoBack() ? (
+          <Pressable
+            style={styles.headerButton}
+            onPress={() => navigation.goBack()}
+            hitSlop={8}
+          >
+            <ChevronLeft size={24} color={colors.primary} />
+          </Pressable>
+        ) : (
+          <View style={styles.headerButton} />
+        )}
         <Text style={styles.headerTitle}>Profile</Text>
         <View style={styles.headerButton} />
       </View>
@@ -76,7 +191,7 @@ export function ProfileScreen() {
         scrollEventThrottle={16}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: Math.max(insets.bottom, spacing.xl) },
+          { paddingBottom: Math.max(insets.bottom, spacing.xl) + 88 },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -86,14 +201,30 @@ export function ProfileScreen() {
           transition={{ type: "timing", duration: 600 }}
         >
           <View style={styles.profileCard}>
-            <View style={styles.avatarContainer}>
+            <Pressable
+              style={styles.avatarContainer}
+              onPress={() => setSheetOpen(true)}
+              disabled={avatar.busy}
+              accessibilityRole="button"
+              accessibilityLabel="Change profile picture"
+            >
               <View style={styles.avatarBorder}>
-                <Image source={{ uri: avatarUri }} style={styles.avatar} />
+                <Avatar uri={avatar.photoURL} name={displayName} size={120} />
+                {avatar.busy ? (
+                  <View style={styles.avatarOverlay}>
+                    <ActivityIndicator color={colors.white} />
+                    {avatar.progress > 0 ? (
+                      <Text style={styles.avatarProgress}>
+                        {Math.round(avatar.progress * 100)}%
+                      </Text>
+                    ) : null}
+                  </View>
+                ) : null}
               </View>
-              <Pressable style={styles.editBadge}>
+              <View style={styles.editBadge}>
                 <Pencil size={12} color={colors.white} />
-              </Pressable>
-            </View>
+              </View>
+            </Pressable>
             <View style={styles.userInfo}>
               <Text style={styles.userName}>{displayName}</Text>
               {displayEmail ? (
@@ -108,76 +239,96 @@ export function ProfileScreen() {
             <View style={styles.settingItem}>
               <View style={styles.settingItemLeft}>
                 <View style={styles.iconBox}>
-                  <Bell size={20} color={colors.primary} />
+                  <BellRing size={20} color={colors.primary} />
                 </View>
-                <View>
+                <View style={styles.settingTextWrap}>
                   <Text style={styles.settingLabel}>Daily Reminders</Text>
-                  <Text style={styles.settingSubtitle}>Morning and evening prayers</Text>
+                  <Text style={styles.settingSubtitle}>
+                    A nudge to pray at {formatTime(reminderTime)}
+                  </Text>
                 </View>
               </View>
               <Switch
                 value={remindersEnabled}
                 onValueChange={toggleReminders}
-                disabled={savingReminder}
-                trackColor={{ false: "#E5E5E5", true: colors.primary }}
+                disabled={savingPrefs}
+                trackColor={{ false: colors.border, true: colors.primary }}
                 thumbColor={colors.white}
               />
             </View>
 
+            <Pressable
+              onPress={openTimePicker}
+              disabled={savingPrefs}
+              style={({ pressed }) => [
+                styles.settingItem,
+                pressed && styles.menuItemPressed,
+              ]}
+            >
+              <View style={styles.settingItemLeft}>
+                <View style={styles.iconBox}>
+                  <Clock size={20} color={colors.primary} />
+                </View>
+                <View style={styles.settingTextWrap}>
+                  <Text style={styles.settingLabel}>Reminder Time</Text>
+                  <Text style={styles.settingSubtitle}>
+                    When your daily nudge arrives
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.trailing}>
+                <Text style={styles.trailingValue}>
+                  {formatTime(reminderTime)}
+                </Text>
+                <ChevronRight size={18} color={colors.textMuted} />
+              </View>
+            </Pressable>
+
             <View style={styles.settingItem}>
               <View style={styles.settingItemLeft}>
                 <View style={styles.iconBox}>
-                  <Bell size={20} color={colors.primary} />
+                  <Smartphone size={20} color={colors.primary} />
                 </View>
-                <View>
+                <View style={styles.settingTextWrap}>
                   <Text style={styles.settingLabel}>Push Notifications</Text>
-                  <Text style={styles.settingSubtitle}>Retreat updates and community</Text>
+                  <Text style={styles.settingSubtitle}>
+                    Retreat updates and community
+                  </Text>
                 </View>
               </View>
               <Switch
-                value={notificationsEnabled}
-                onValueChange={setNotificationsEnabled}
-                trackColor={{ false: "#E5E5E5", true: colors.primary }}
+                value={pushEnabled}
+                onValueChange={togglePush}
+                disabled={savingPrefs}
+                trackColor={{ false: colors.border, true: colors.primary }}
                 thumbColor={colors.white}
               />
             </View>
 
             <View style={styles.menuContainer}>
-              <Pressable style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed, styles.menuItemDivider]}>
-                <View style={styles.menuItemLeft}>
-                  <View style={styles.iconBox}>
-                    <User size={20} color={colors.primary} />
-                  </View>
-                  <Text style={styles.menuLabel}>Personal Information</Text>
-                </View>
-                <ChevronRight size={18} color={colors.textMuted} />
-              </Pressable>
-
-              <Pressable style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed, styles.menuItemDivider]}>
-                <View style={styles.menuItemLeft}>
-                  <View style={styles.iconBox}>
-                    <Shield size={20} color={colors.primary} />
-                  </View>
-                  <Text style={styles.menuLabel}>Privacy & Security</Text>
-                </View>
-                <ChevronRight size={18} color={colors.textMuted} />
-              </Pressable>
-
-              <Pressable style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed]}>
-                <View style={styles.menuItemLeft}>
-                  <View style={styles.iconBox}>
-                    <CircleHelp size={20} color={colors.primary} />
-                  </View>
-                  <Text style={styles.menuLabel}>Support Center</Text>
-                </View>
-                <ChevronRight size={18} color={colors.textMuted} />
-              </Pressable>
+              <MenuItem
+                icon={<User size={20} color={colors.primary} />}
+                label="Personal Information"
+                onPress={() => navigation.navigate("EditProfile")}
+                divider
+              />
+              <MenuItem
+                icon={<Shield size={20} color={colors.primary} />}
+                label="Privacy & Security"
+                onPress={() => navigation.navigate("PrivacySecurity")}
+                divider
+              />
+              <MenuItem
+                icon={<CircleHelp size={20} color={colors.primary} />}
+                label="Support Center"
+                onPress={() => navigation.navigate("SupportCenter")}
+              />
             </View>
           </View>
 
           <View style={styles.logoutSection}>
             <Pressable
-              onPress={() => signOut()}
+              onPress={confirmSignOut}
               style={({ pressed }) => [
                 styles.logoutButton,
                 pressed && styles.logoutButtonPressed,
@@ -186,11 +337,109 @@ export function ProfileScreen() {
               <LogOut size={20} color={colors.primary} />
               <Text style={styles.logoutText}>Logout</Text>
             </Pressable>
-            <Text style={styles.versionInfo}>HAPPY PLACE V2.4.0</Text>
+            <Text style={styles.versionInfo}>
+              HAPPY PLACE V{appVersion}
+            </Text>
           </View>
         </MotiView>
       </ScrollView>
+
+      <PhotoSourceSheet
+        visible={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        onTakePhoto={avatar.takePhoto}
+        onChooseFromLibrary={avatar.chooseFromLibrary}
+        onRemovePhoto={avatar.photoURL ? avatar.removePhoto : undefined}
+      />
+
+      {pickerOpen && Platform.OS === "android" ? (
+        <DateTimePicker value={pickerValue} mode="time" onChange={onAndroidPicked} />
+      ) : null}
+
+      {Platform.OS === "ios" ? (
+        <Modal
+          visible={pickerOpen}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setPickerOpen(false)}
+        >
+          <Pressable
+            style={styles.modalBackdrop}
+            onPress={() => setPickerOpen(false)}
+          >
+            <Pressable style={styles.modalCard} onPress={() => {}}>
+              <Text style={styles.modalTitle}>Daily Reminder Time</Text>
+              <DateTimePicker
+                value={pickerValue}
+                mode="time"
+                display="spinner"
+                // The modal's window doesn't inherit the app's forced-light
+                // appearance, so the wheel would render dark-mode (white) text
+                // on this light card unless it's pinned here.
+                themeVariant="light"
+                textColor={colors.textPrimary}
+                onChange={(_e, date) => date && setPickerValue(date)}
+              />
+              <View style={styles.modalActions}>
+                <Pressable
+                  onPress={() => setPickerOpen(false)}
+                  style={({ pressed }) => [
+                    styles.modalBtn,
+                    pressed && styles.menuItemPressed,
+                  ]}
+                >
+                  <Text style={styles.modalBtnText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    setPickerOpen(false);
+                    saveReminderTime(pickerValue);
+                  }}
+                  style={({ pressed }) => [
+                    styles.modalBtn,
+                    styles.modalBtnPrimary,
+                    pressed && styles.logoutButtonPressed,
+                  ]}
+                >
+                  <Text style={[styles.modalBtnText, styles.modalBtnTextPrimary]}>
+                    Done
+                  </Text>
+                </Pressable>
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      ) : null}
     </View>
+  );
+}
+
+function MenuItem({
+  icon,
+  label,
+  onPress,
+  divider,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onPress: () => void;
+  divider?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.menuItem,
+        pressed && styles.menuItemPressed,
+        divider && styles.menuItemDivider,
+      ]}
+    >
+      <View style={styles.menuItemLeft}>
+        <View style={styles.iconBox}>{icon}</View>
+        <Text style={styles.menuLabel}>{label}</Text>
+      </View>
+      <ChevronRight size={18} color={colors.textMuted} />
+    </Pressable>
   );
 }
 
@@ -243,10 +492,23 @@ const styles = StyleSheet.create({
     borderWidth: 4,
     borderColor: "rgba(138, 110, 71, 0.1)",
   },
-  avatar: {
-    width: 120,
-    height: 120,
+  avatarOverlay: {
+    position: "absolute",
+    top: 4,
+    left: 4,
+    right: 4,
+    bottom: 4,
     borderRadius: radii.full,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    backgroundColor: "rgba(26, 26, 26, 0.45)",
+  },
+  avatarProgress: {
+    fontFamily: fontFamilies.sans,
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.white,
   },
   editBadge: {
     position: "absolute",
@@ -271,6 +533,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: colors.textPrimary,
     marginBottom: 4,
+    textAlign: "center",
   },
   userEmail: {
     fontFamily: fontFamilies.sans,
@@ -307,6 +570,9 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     flex: 1,
   },
+  settingTextWrap: {
+    flex: 1,
+  },
   settingLabel: {
     fontFamily: fontFamilies.sans,
     fontSize: fontSizes.base,
@@ -318,6 +584,17 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.sans,
     fontSize: 12,
     color: colors.textMuted,
+  },
+  trailing: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  trailingValue: {
+    fontFamily: fontFamilies.sans,
+    fontSize: fontSizes.sm,
+    fontWeight: "700",
+    color: colors.primary,
   },
   menuContainer: {
     backgroundColor: colors.white,
@@ -391,5 +668,50 @@ const styles = StyleSheet.create({
     marginTop: spacing.xl,
     letterSpacing: 1.5,
     textAlign: "center",
+  },
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+  },
+  modalCard: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: radii["2xl"],
+    borderTopRightRadius: radii["2xl"],
+    padding: spacing.xl,
+  },
+  modalTitle: {
+    fontFamily: fontFamilies.serif,
+    fontSize: fontSizes.xl,
+    fontWeight: "700",
+    color: colors.textPrimary,
+    textAlign: "center",
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: spacing.md,
+    marginTop: spacing.md,
+  },
+  modalBtn: {
+    flex: 1,
+    paddingVertical: spacing.lg,
+    borderRadius: radii.xl,
+    alignItems: "center",
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.primaryLight05,
+  },
+  modalBtnPrimary: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  modalBtnText: {
+    fontFamily: fontFamilies.sans,
+    fontSize: fontSizes.base,
+    fontWeight: "700",
+    color: colors.primary,
+  },
+  modalBtnTextPrimary: {
+    color: colors.white,
   },
 });

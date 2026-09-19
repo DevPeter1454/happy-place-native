@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { ChevronRight } from 'lucide-react-native';
 import { colors, fontFamilies, fontSizes, spacing, radii, shadows } from '../../theme';
 
 type TaskStatus = 'done' | 'active' | 'pending';
@@ -14,39 +15,56 @@ interface TaskCardProps {
 
 export function TaskCard({ icon, title, subtitle, status, onStart }: TaskCardProps) {
   const isActive = status === 'active';
+  const isDone = status === 'done';
 
+  // The whole card is the tap target, in every state. A finished discipline is
+  // still somewhere you want to go — to read today's passage again, add another
+  // prayer, or look back at what you wrote — so "done" must not be a dead end.
   return (
-    <View style={[styles.card, isActive && styles.activeCard]}>
-      <View style={styles.left}>
-        <View style={[styles.iconBox, isActive && styles.activeIconBox]}>
-          {icon}
-        </View>
-        <View style={styles.textContainer}>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={[styles.subtitle, isActive && styles.activeSubtitle]}>
-            {subtitle}
-          </Text>
-        </View>
-      </View>
+    <Pressable
+      onPress={onStart}
+      accessibilityRole="button"
+      accessibilityLabel={isDone ? `${title}, done today` : title}
+      style={({ pressed }) => [
+        styles.card,
+        isActive && styles.activeCard,
+        pressed && styles.cardPressed,
+      ]}
+    >
+      {({ pressed }) => (
+        <>
+          <View style={styles.left}>
+            <View style={[styles.iconBox, isActive && styles.activeIconBox]}>
+              {icon}
+            </View>
+            <View style={styles.textContainer}>
+              <Text style={styles.title}>{title}</Text>
+              <Text style={[styles.subtitle, isActive && styles.activeSubtitle]}>
+                {subtitle}
+              </Text>
+            </View>
+          </View>
 
-      {status === 'done' && (
-        <View style={styles.doneBadge}>
-          <Text style={styles.doneText}>✓ Done</Text>
-        </View>
-      )}
+          {isDone && (
+            <View style={styles.doneRow}>
+              <View style={styles.doneBadge}>
+                <Text style={styles.doneText}>✓ Done</Text>
+              </View>
+              {/* Signals the card still leads somewhere once it's complete. */}
+              <ChevronRight size={16} color={colors.textPlaceholder} />
+            </View>
+          )}
 
-      {isActive && (
-        <Pressable
-          onPress={onStart}
-          style={({ pressed }) => [
-            styles.startButton,
-            pressed && styles.startButtonPressed,
-          ]}
-        >
-          <Text style={styles.startButtonText}>Start</Text>
-        </Pressable>
+          {isActive && (
+            <View
+              style={[styles.startButton, pressed && styles.startButtonPressed]}
+            >
+              <Text style={styles.startButtonText}>Start</Text>
+            </View>
+          )}
+        </>
       )}
-    </View>
+    </Pressable>
   );
 }
 
@@ -70,6 +88,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 6,
     elevation: 3,
+  },
+  cardPressed: {
+    backgroundColor: colors.primaryLight05,
+  },
+  doneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   left: {
     flexDirection: 'row',

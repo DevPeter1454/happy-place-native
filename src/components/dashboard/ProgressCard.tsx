@@ -10,15 +10,34 @@ interface ProgressCardProps {
   streakDays: number;
 }
 
+/**
+ * A line that matches where the day actually is. This was previously a fixed
+ * "You're almost there" — which read wrong at 0% and, worse, still nagged after
+ * everything was done.
+ */
+function encouragementFor(completed: number, total: number): string {
+  if (total <= 0) return "Nothing to do today.";
+  if (completed === 0) return "A fresh day — begin whenever you're ready.";
+  if (completed >= total) return "All done for today. Well done.";
+  if (completed >= total / 2) return "You're almost there, keep going.";
+  return "A good start — keep going.";
+}
+
 export function ProgressCard({ percentage, completed, total, streakDays }: ProgressCardProps) {
+  const isComplete = total > 0 && completed >= total;
+
   return (
     <View style={styles.card}>
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Today's Progress</Text>
-          <Text style={styles.subtitle}>You're almost there, keep going.</Text>
+          <Text style={[styles.subtitle, isComplete && styles.subtitleComplete]}>
+            {encouragementFor(completed, total)}
+          </Text>
         </View>
-        <Text style={styles.percentage}>{percentage}%</Text>
+        <Text style={[styles.percentage, isComplete && styles.percentageComplete]}>
+          {percentage}%
+        </Text>
       </View>
 
       <View style={styles.progressTrack}>
@@ -26,7 +45,7 @@ export function ProgressCard({ percentage, completed, total, streakDays }: Progr
           from={{ width: '0%' }}
           animate={{ width: `${percentage}%` as any }}
           transition={{ type: 'timing', duration: 800, delay: 300 }}
-          style={styles.progressFill}
+          style={[styles.progressFill, isComplete && styles.progressFillComplete]}
         />
       </View>
 
@@ -86,6 +105,16 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: colors.primary,
     borderRadius: radii.full,
+  },
+  progressFillComplete: {
+    backgroundColor: colors.success,
+  },
+  subtitleComplete: {
+    color: colors.success,
+    fontWeight: '600',
+  },
+  percentageComplete: {
+    color: colors.success,
   },
   footer: {
     flexDirection: 'row',

@@ -50,7 +50,7 @@ const illustrationStyles = StyleSheet.create({
     overflow: 'hidden',
   },
   bgIcons: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 32,
